@@ -40,19 +40,19 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
           disabled={disabled}
           style={{
             width: '100%',
-            padding: '14px 18px',
-            borderRadius: 12,
+            padding: '16px 20px',
+            borderRadius: 16,
             border: isFocused
-              ? '2px solid #10b981'
-              : '2px solid #334155',
-            background: '#1e293b',
-            color: '#f1f5f9',
+              ? '2px solid #fbbf24'
+              : '2px solid rgba(255, 255, 255, 0.1)',
+            background: 'rgba(0, 0, 0, 0.4)',
+            color: '#fafafa',
             fontSize: 14,
-            fontFamily: 'DM Sans, sans-serif',
+            fontFamily: 'Inter, sans-serif',
             outline: 'none',
             transition: 'all 0.2s ease',
             boxShadow: isFocused
-              ? '0 0 0 4px rgba(16, 185, 129, 0.1)'
+              ? '0 0 0 4px rgba(251, 191, 36, 0.1)'
               : 'none',
           }}
         />
@@ -62,33 +62,33 @@ export default function MessageInput({ onSend, disabled }: MessageInputProps) {
         type="submit"
         disabled={disabled || !message.trim()}
         style={{
-          padding: '14px 24px',
-          borderRadius: 12,
+          padding: '16px 28px',
+          borderRadius: 16,
           border: 'none',
           background: message.trim() && !disabled
-            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-            : '#334155',
-          color: message.trim() && !disabled ? 'white' : '#64748b',
+            ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)'
+            : 'rgba(255, 255, 255, 0.1)',
+          color: message.trim() && !disabled ? '#09090b' : '#71717a',
           cursor: message.trim() && !disabled ? 'pointer' : 'not-allowed',
           fontSize: 14,
           fontWeight: 600,
-          fontFamily: 'DM Sans, sans-serif',
+          fontFamily: 'Space Grotesk, sans-serif',
           transition: 'all 0.2s ease',
           boxShadow: message.trim() && !disabled
-            ? '0 4px 16px rgba(16, 185, 129, 0.3)'
+            ? '0 6px 24px rgba(251, 191, 36, 0.3)'
             : 'none',
           transform: message.trim() && !disabled ? 'scale(1)' : 'scale(0.98)',
         }}
         onMouseEnter={(e) => {
           if (message.trim() && !disabled) {
             e.currentTarget.style.transform = 'scale(1.02)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
+            e.currentTarget.style.boxShadow = '0 8px 32px rgba(251, 191, 36, 0.4)';
           }
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = message.trim() && !disabled ? 'scale(1)' : 'scale(0.98)';
           e.currentTarget.style.boxShadow = message.trim() && !disabled
-            ? '0 4px 16px rgba(16, 185, 129, 0.3)'
+            ? '0 6px 24px rgba(251, 191, 36, 0.3)'
             : 'none';
         }}
       >

@@ -92,6 +92,71 @@ export async function initDb(): Promise<SqlJsDatabase> {
     )
   `);
 
+  // user_profiles table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      target_position TEXT,
+      education TEXT,
+      experience TEXT,
+      skills TEXT,
+      projects TEXT,
+      personality TEXT,
+      preferred_style TEXT DEFAULT 'gentle',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // coaching_logs table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS coaching_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      interview_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      coaching_type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      agent_response TEXT DEFAULT 'pending',
+      agent_feedback TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (interview_id) REFERENCES interviews(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // interview_feedbacks table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS interview_feedbacks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      interview_id INTEGER NOT NULL,
+      round INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (interview_id) REFERENCES interviews(id)
+    )
+  `);
+
+  // Update evaluations table to include new fields (add columns if not exist)
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN overall_score INTEGER');
+  } catch (e) { /* ignore */ }
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN technical_depth INTEGER');
+  } catch (e) { /* ignore */ }
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN communication INTEGER');
+  } catch (e) { /* ignore */ }
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN project_experience INTEGER');
+  } catch (e) { /* ignore */ }
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN adaptability INTEGER');
+  } catch (e) { /* ignore */ }
+
   // 添加 agent_id 列到 interviews 表（如果不存在）
   try {
     db.run('ALTER TABLE interviews ADD COLUMN agent_id INTEGER');

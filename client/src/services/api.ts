@@ -1,4 +1,4 @@
-import type { Agent } from '../types';
+import type { Agent, UserProfile, CoachingLog, InterviewFeedback } from '../types';
 
 const API_BASE = '/api';
 
@@ -50,6 +50,15 @@ export const api = {
   completeInterview: (id: number) =>
     request(`/interview/${id}/complete`, { method: 'POST' }),
 
+  startInterview: (id: number) =>
+    request(`/interview/${id}/start`, { method: 'POST' }),
+
+  pauseInterview: (id: number) =>
+    request(`/interview/${id}/pause`, { method: 'POST' }),
+
+  resumeInterview: (id: number) =>
+    request(`/interview/${id}/resume`, { method: 'POST' }),
+
   deleteInterview: (id: number) =>
     request(`/interview/${id}`, { method: 'DELETE' }),
 
@@ -66,4 +75,25 @@ export const api = {
 
   deleteAgent: (id: number) =>
     request<void>(`/agents/${id}`, { method: 'DELETE' }),
+
+  // Profile APIs
+  getProfile: () => request<UserProfile>('/profiles'),
+  getProfileById: (id: number) => request<UserProfile>(`/profiles/${id}`),
+  createProfile: (data: Partial<UserProfile>) =>
+    request<UserProfile>('/profiles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProfile: (id: number, data: Partial<UserProfile>) =>
+    request<UserProfile>(`/profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Coaching APIs
+  getCoachingLogs: (interviewId: number) =>
+    request<CoachingLog[]>(`/interview/${interviewId}/coaching`),
+  processCoaching: (interviewId: number, content: string) =>
+    request<{ accepted: boolean; reason: string; appliedContent?: string }>(
+      `/interview/${interviewId}/coach`,
+      { method: 'POST', body: JSON.stringify({ content }) }
+    ),
+
+  // Feedback APIs
+  getFeedbacks: (interviewId: number) =>
+    request<InterviewFeedback[]>(`/interview/${interviewId}/feedback`),
 };

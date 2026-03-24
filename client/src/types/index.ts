@@ -48,6 +48,7 @@ export interface Evaluation {
   pros: string;
   cons: string;
   suggestions: string;
+  highlights?: { question: string; answer: string }[];
   created_at: string;
 }
 
@@ -66,4 +67,47 @@ export interface Agent {
   specialties?: string;
   company?: string;
   created_at: string;
+}
+
+export interface UserProfile {
+  id: number;
+  user_id: number;
+  name: string;
+  target_position: string | null;
+  education: string | null;
+  experience: string | null;
+  skills: string | null;
+  projects: string | null;
+  personality: string | null;
+  preferred_style: 'gentle' | 'strict' | 'coaching';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachingLog {
+  id: number;
+  interview_id: number;
+  user_id: number;
+  coaching_type: 'guide' | 'correct' | 'info_request';
+  content: string;
+  agent_response: 'pending' | 'accepted' | 'rejected' | 'question';
+  agent_feedback: string | null;
+  created_at: string;
+}
+
+export interface InterviewFeedback {
+  id: number;
+  interview_id: number;
+  round: number;
+  type: 'realtime' | 'summary';
+  content: string;
+  created_at: string;
+}
+
+export interface EnhancedEvaluation extends Evaluation {
+  overall_score?: number;
+  technical_depth?: number;
+  communication?: number;
+  project_experience?: number;
+  adaptability?: number;
 }

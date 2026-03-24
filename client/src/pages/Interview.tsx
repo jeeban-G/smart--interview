@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import type { Interview, Message, Evaluation } from '../types';
-import MessageList from '../components/MessageList';
+import type { Interview, Message, Evaluation, InterviewFeedback, CoachingLog } from '../types';
+import MessageList from '../components/MessageListManga';
 import MessageInput from '../components/MessageInput';
 import EvaluationReport from '../components/EvaluationReport';
+import CoachInput from '../components/CoachInput';
+import FeedbackPanel from '../components/FeedbackPanel';
 
 export default function Interview() {
   const { id } = useParams<{ id: string }>();
@@ -15,9 +17,15 @@ export default function Interview() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [showEval, setShowEval] = useState(false);
-  const [isAgentTyping, setIsAgentTyping] = useState(false);
+  const [, setIsAgentTyping] = useState(false);
   const [typingAgent, setTypingAgent] = useState<'candidate' | 'interviewer' | null>(null);
   const [pageLoaded, setPageLoaded] = useState(false);
+  const [feedbacks, setFeedbacks] = useState<InterviewFeedback[]>([]);
+  const [coachingLogs, setCoachingLogs] = useState<CoachingLog[]>([]);
+  const [isCoachMode, setIsCoachMode] = useState(false);
+  const [coachPanelOpen, setCoachPanelOpen] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isStarted, setIsStarted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessagesCountRef = useRef(0);
@@ -38,7 +46,6 @@ export default function Interview() {
     setPageLoaded(true);
   }, [id]);
 
-  // SSE for real-time message updates
   useEffect(() => {
     if (!id || !interview) return;
 
@@ -48,32 +55,44 @@ export default function Interview() {
       const data = JSON.parse(event.data);
 
       if (data.type === 'message') {
+        setIsAgentTyping(false);
+        setTypingAgent(null);
         setMessages(prev => {
           if (prev.some(m => m.id === data.message.id)) {
             return prev;
           }
           return [...prev, data.message];
         });
-
-        if (data.agent === 'interviewer') {
-          setTypingAgent('candidate');
-          setIsAgentTyping(true);
-          setTimeout(() => {
-            setIsAgentTyping(false);
-            setTypingAgent(null);
-          }, 3000);
-        } else if (data.agent === 'candidate') {
-          setTypingAgent('interviewer');
-          setIsAgentTyping(true);
-          setTimeout(() => {
-            setIsAgentTyping(false);
-            setTypingAgent(null);
-          }, 3000);
-        }
+      } else if (data.type === 'typing') {
+        // Handle typing indicator from server
+        setTypingAgent(data.agent);
+        setIsAgentTyping(true);
+        // Auto-clear after a timeout (server will send message to clear)
+        setTimeout(() => {
+          setIsAgentTyping(false);
+          setTypingAgent(null);
+        }, 5000);
       } else if (data.type === 'done') {
+        setIsAgentTyping(false);
+        setTypingAgent(null);
         setInterview(prev => prev ? { ...prev, status: 'completed' } : null);
         setShowEval(true);
-        loadEvaluation();
+        // 如果 SSE 中有评估数据，直接使用
+        if (data.evaluation) {
+          setEvaluation(data.evaluation);
+        } else {
+          loadEvaluation();
+        }
+      } else if (data.type === 'paused') {
+        setIsPaused(true);
+      } else if (data.type === 'resumed') {
+        setIsPaused(false);
+      } else if (data.type === 'feedback') {
+        setFeedbacks(prev => [...prev, { id: Date.now(), interview_id: parseInt(id!), round: data.round, type: 'realtime', content: data.content, created_at: new Date().toISOString() }]);
+      } else if (data.type === 'coaching_accepted') {
+        setCoachingLogs(prev => [...prev, { id: Date.now(), interview_id: parseInt(id!), user_id: 1, coaching_type: 'guide', content: data.original, agent_response: 'accepted', agent_feedback: data.applied, created_at: new Date().toISOString() }]);
+      } else if (data.type === 'coaching_rejected') {
+        setCoachingLogs(prev => [...prev, { id: Date.now(), interview_id: parseInt(id!), user_id: 1, coaching_type: 'correct', content: data.original, agent_response: 'rejected', agent_feedback: data.reason, created_at: new Date().toISOString() }]);
       }
     };
 
@@ -154,33 +173,82 @@ export default function Interview() {
     }
   };
 
+  const handleStartChat = async () => {
+    try {
+      await api.startInterview(parseInt(id!));
+      setIsStarted(true);
+      setIsPaused(false);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handlePauseChat = async () => {
+    try {
+      await api.pauseInterview(parseInt(id!));
+      setIsPaused(true);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleResumeChat = async () => {
+    try {
+      await api.resumeInterview(parseInt(id!));
+      setIsPaused(false);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleCoachSend = async (content: string) => {
+    try {
+      const result = await api.processCoaching(parseInt(id!), content);
+      if (result.accepted) {
+        setCoachingLogs(prev => [...prev, {
+          id: Date.now(),
+          interview_id: parseInt(id!),
+          user_id: 1,
+          coaching_type: 'guide',
+          content,
+          agent_response: 'accepted',
+          agent_feedback: result.appliedContent || '',
+          created_at: new Date().toISOString(),
+        }]);
+      } else {
+        setCoachingLogs(prev => [...prev, {
+          id: Date.now(),
+          interview_id: parseInt(id!),
+          user_id: 1,
+          coaching_type: 'correct',
+          content,
+          agent_response: 'rejected',
+          agent_feedback: result.reason,
+          created_at: new Date().toISOString(),
+        }]);
+      }
+    } catch (err) {
+      console.error('Coach send error:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{
-        height: 'calc(100vh - 60px)',
+        height: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#0f172a',
+        background: '#09090b',
       }}>
         <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 16,
-        }}>
-          <div style={{
-            width: 40,
-            height: 40,
-            border: '3px solid #1e293b',
-            borderTopColor: '#10b981',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }} />
-          <span style={{ color: '#94a3b8', fontFamily: 'DM Sans, sans-serif', fontSize: 14 }}>
-            加载面试中...
-          </span>
-        </div>
+          width: 32,
+          height: 32,
+          border: '3px solid rgba(255, 255, 255, 0.1)',
+          borderTopColor: '#fbbf24',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
         <style>{`
           @keyframes spin {
             to { transform: rotate(360deg); }
@@ -197,9 +265,9 @@ export default function Interview() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#0f172a',
-        color: '#94a3b8',
-        fontFamily: 'DM Sans, sans-serif',
+        background: '#09090b',
+        color: '#71717a',
+        fontFamily: 'Inter, sans-serif',
       }}>
         面试不存在
       </div>
@@ -209,7 +277,7 @@ export default function Interview() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap');
 
         * {
           box-sizing: border-box;
@@ -218,7 +286,7 @@ export default function Interview() {
         @keyframes fadeInUp {
           from {
             opacity: 0;
-            transform: translateY(12px);
+            transform: translateY(16px);
           }
           to {
             opacity: 1;
@@ -232,29 +300,38 @@ export default function Interview() {
         }
 
         @keyframes typingDot {
-          0%, 60%, 100% {
-            transform: translateY(0);
-            opacity: 0.4;
-          }
-          30% {
-            transform: translateY(-6px);
-            opacity: 1;
-          }
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
         }
 
         @keyframes shimmer {
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
         }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        ::-webkit-scrollbar {
+          width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 3px;
+        }
       `}</style>
 
       <div style={{
         display: 'flex',
         height: 'calc(100vh - 60px)',
-        background: '#0f172a',
-        fontFamily: 'DM Sans, sans-serif',
+        background: '#09090b',
+        fontFamily: 'Inter, sans-serif',
         opacity: pageLoaded ? 1 : 0,
-        transition: 'opacity 0.4s ease',
+        transition: 'opacity 0.5s ease',
       }}>
         {/* 左侧主聊天区 */}
         <div style={{
@@ -262,54 +339,56 @@ export default function Interview() {
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
-          borderRight: showEval ? '1px solid #1e293b' : 'none',
+          borderRight: showEval ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
         }}>
           {/* 顶部头部 */}
           <div style={{
-            padding: '20px 24px',
-            borderBottom: '1px solid #1e293b',
-            background: 'linear-gradient(180deg, #0f172a 0%, #0f172a 100%)',
+            padding: '24px 28px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            background: 'rgba(0, 0, 0, 0.3)',
             animation: 'fadeInUp 0.5s ease',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
               <div style={{
-                width: 8,
-                height: 8,
+                width: 10,
+                height: 10,
                 borderRadius: '50%',
-                background: interview.status === 'completed' ? '#64748b' : '#10b981',
-                boxShadow: interview.status === 'completed' ? 'none' : '0 0 12px #10b981',
+                background: interview.status === 'completed' ? '#52525b' : '#22c55e',
+                boxShadow: interview.status === 'completed' ? 'none' : '0 0 16px #22c55e',
                 animation: interview.status !== 'completed' ? 'pulse 2s ease-in-out infinite' : 'none',
               }} />
               <h1 style={{
                 margin: 0,
-                fontSize: 18,
-                fontWeight: 600,
-                fontFamily: 'Outfit, sans-serif',
-                color: '#f1f5f9',
+                fontSize: 20,
+                fontWeight: 700,
+                fontFamily: 'Space Grotesk, sans-serif',
+                color: '#fafafa',
                 letterSpacing: '-0.02em',
               }}>
                 {interview.position}
               </h1>
               <span style={{
-                padding: '4px 10px',
+                padding: '5px 14px',
                 borderRadius: 20,
                 fontSize: 12,
-                fontWeight: 500,
-                background: interview.type === 'group' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                color: interview.type === 'group' ? '#10b981' : '#f59e0b',
-                border: `1px solid ${interview.type === 'group' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                fontWeight: 600,
+                background: interview.type === 'group'
+                  ? 'rgba(34, 197, 94, 0.12)'
+                  : 'rgba(251, 191, 36, 0.12)',
+                color: interview.type === 'group' ? '#22c55e' : '#fbbf24',
+                border: `1px solid ${interview.type === 'group' ? 'rgba(34, 197, 94, 0.25)' : 'rgba(251, 191, 36, 0.25)'}`,
               }}>
-                {interview.type === 'group' ? '群面' : '单面'}
+                {interview.type === 'group' ? '👥 群面' : '👤 单面'}
               </span>
             </div>
             {interview.question && (
               <p style={{
                 margin: 0,
                 fontSize: 13,
-                color: '#94a3b8',
-                lineHeight: 1.5,
+                color: '#71717a',
+                lineHeight: 1.6,
               }}>
-                <span style={{ color: '#64748b' }}>本次议题：</span>
+                <span style={{ color: '#52525b' }}>本次议题：</span>
                 {interview.question}
               </p>
             )}
@@ -322,113 +401,96 @@ export default function Interview() {
             style={{
               flex: 1,
               overflow: 'auto',
-              background: 'linear-gradient(180deg, #0f172a 0%, #0c1322 100%)',
+              background: '#f8f8f8',
+              borderRadius: 16,
+              margin: '0 12px',
+              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.1)',
             }}
           >
-            <MessageList messages={messages} />
-
-            {/* 正在输入指示器 */}
-            {isAgentTyping && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                marginTop: 12,
-                padding: '0 16px',
-                animation: 'fadeInUp 0.3s ease',
-              }}>
-                {typingAgent === 'candidate' && (
-                  <div style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)',
-                  }}>
-                    求
-                  </div>
-                )}
-                <div style={{
-                  padding: '12px 18px',
-                  background: '#1e293b',
-                  borderRadius: 16,
-                  borderTopLeftRadius: 4,
-                  display: 'flex',
-                  gap: 5,
-                  alignItems: 'center',
-                }}>
-                  {[0, 1, 2].map((i) => (
-                    <span key={i} style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: '#64748b',
-                      animation: `typingDot 1.4s ease-in-out ${i * 0.2}s infinite`,
-                    }} />
-                  ))}
-                </div>
-                {typingAgent === 'interviewer' && (
-                  <div style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    boxShadow: '0 0 20px rgba(245, 158, 11, 0.3)',
-                  }}>
-                    官
-                  </div>
-                )}
-              </div>
-            )}
+            <MessageList messages={messages} typingCharacter={typingAgent} />
 
             <div ref={messagesEndRef} />
           </div>
 
           {/* 底部输入区 */}
           <div style={{
-            padding: 20,
-            borderTop: '1px solid #1e293b',
-            background: '#0f172a',
+            padding: 24,
+            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+            background: 'rgba(0, 0, 0, 0.4)',
           }}>
+            {/* Coach mode controls */}
+            {isAgentChat && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 12,
+              }}>
+                <button
+                  onClick={() => setIsCoachMode(!isCoachMode)}
+                  style={{
+                    padding: '8px 16px',
+                    background: isCoachMode ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                    border: isCoachMode ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: 8,
+                    color: isCoachMode ? '#22c55e' : '#71717a',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isCoachMode ? '✓ 教练模式' : '开启教练模式'}
+                </button>
+                {isCoachMode && (
+                  <button
+                    onClick={() => setCoachPanelOpen(!coachPanelOpen)}
+                    style={{
+                      padding: '8px 16px',
+                      background: coachPanelOpen ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                      border: coachPanelOpen ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 8,
+                      color: coachPanelOpen ? '#fbbf24' : '#71717a',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {coachPanelOpen ? '隐藏反馈' : '显示反馈'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Coach input */}
+            {isCoachMode && (
+              <CoachInput onSend={handleCoachSend} disabled={!!isAgentChat} />
+            )}
+
             {/* Agent 状态指示 */}
             {isAgentChat && interview.status !== 'completed' && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 8,
-                marginBottom: 12,
-                padding: '8px 16px',
-                background: 'rgba(16, 185, 129, 0.08)',
-                borderRadius: 8,
-                border: '1px solid rgba(16, 185, 129, 0.2)',
+                gap: 10,
+                marginBottom: 16,
+                padding: '10px 20px',
+                background: isPaused ? 'rgba(251, 191, 36, 0.08)' : 'rgba(34, 197, 94, 0.08)',
+                borderRadius: 12,
+                border: isPaused ? '1px solid rgba(251, 191, 36, 0.2)' : '1px solid rgba(34, 197, 94, 0.2)',
                 animation: 'fadeInUp 0.4s ease',
               }}>
                 <div style={{
-                  width: 6,
-                  height: 6,
+                  width: 8,
+                  height: 8,
                   borderRadius: '50%',
-                  background: '#10b981',
-                  animation: 'pulse 1.5s ease-in-out infinite',
+                  background: isPaused ? '#fbbf24' : '#22c55e',
+                  animation: isPaused ? 'none' : 'pulse 1.5s ease-in-out infinite',
                 }} />
                 <span style={{
-                  fontSize: 12,
-                  color: '#10b981',
+                  fontSize: 13,
+                  color: isPaused ? '#fbbf24' : '#22c55e',
                   fontWeight: 500,
                 }}>
-                  AI Agent 对话中
+                  {isPaused ? '⏸ 已暂停' : 'AI Agent 对话中'}
                 </span>
               </div>
             )}
@@ -436,33 +498,96 @@ export default function Interview() {
             {/* 按钮区域 */}
             {interview.status !== 'completed' ? (
               isAgentChat ? (
-                <button
-                  onClick={handleStopChat}
-                  style={{
-                    width: '100%',
-                    padding: '14px 20px',
-                    background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    fontFamily: 'DM Sans, sans-serif',
-                    boxShadow: '0 4px 20px rgba(220, 38, 38, 0.3)',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = '0 6px 24px rgba(220, 38, 38, 0.4)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(220, 38, 38, 0.3)';
-                  }}
-                >
-                  结束面试
-                </button>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  {!isStarted ? (
+                    <button
+                      onClick={handleStartChat}
+                      style={{
+                        flex: 1,
+                        padding: '16px 24px',
+                        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 14,
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        fontFamily: 'Space Grotesk, sans-serif',
+                        boxShadow: '0 8px 30px rgba(34, 197, 94, 0.25)',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 12px 40px rgba(34, 197, 94, 0.35)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 8px 30px rgba(34, 197, 94, 0.25)';
+                      }}
+                    >
+                      ▶ 开始面试
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={isPaused ? handleResumeChat : handlePauseChat}
+                        style={{
+                          flex: 1,
+                          padding: '16px 24px',
+                          background: isPaused
+                            ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                            : 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 14,
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          fontFamily: 'Space Grotesk, sans-serif',
+                          boxShadow: isPaused
+                            ? '0 8px 30px rgba(34, 197, 94, 0.25)'
+                            : '0 8px 30px rgba(251, 191, 36, 0.25)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        {isPaused ? '▶ 继续面试' : '⏸ 暂停面试'}
+                      </button>
+                      <button
+                        onClick={handleStopChat}
+                        style={{
+                          flex: 1,
+                          padding: '16px 24px',
+                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 14,
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          fontFamily: 'Space Grotesk, sans-serif',
+                          boxShadow: '0 8px 30px rgba(239, 68, 68, 0.25)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 12px 40px rgba(239, 68, 68, 0.35)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 8px 30px rgba(239, 68, 68, 0.25)';
+                        }}
+                      >
+                        ■ 结束面试
+                      </button>
+                    </>
+                  )}
+                </div>
               ) : (
                 <>
                   <MessageInput onSend={handleSend} disabled={sending || !!isAgentChat} />
@@ -471,24 +596,24 @@ export default function Interview() {
                     style={{
                       width: '100%',
                       marginTop: 12,
-                      padding: '10px 16px',
+                      padding: '12px 20px',
                       background: 'transparent',
-                      color: '#64748b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
+                      color: '#71717a',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: 12,
                       cursor: 'pointer',
                       fontSize: 13,
                       fontWeight: 500,
-                      fontFamily: 'DM Sans, sans-serif',
+                      fontFamily: 'Inter, sans-serif',
                       transition: 'all 0.2s ease',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#dc2626';
-                      e.currentTarget.style.color = '#dc2626';
+                      e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                      e.currentTarget.style.color = '#ef4444';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = '#334155';
-                      e.currentTarget.style.color = '#64748b';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.color = '#71717a';
                     }}
                   >
                     结束面试
@@ -497,10 +622,12 @@ export default function Interview() {
               )
             ) : (
               <div style={{
-                padding: 20,
+                padding: 24,
                 textAlign: 'center',
-                color: '#64748b',
+                color: '#52525b',
                 fontSize: 14,
+                background: 'rgba(0, 0, 0, 0.3)',
+                borderRadius: 14,
               }}>
                 面试已结束
               </div>
@@ -508,12 +635,54 @@ export default function Interview() {
           </div>
         </div>
 
+        {/* Right feedback panel */}
+        {coachPanelOpen && isCoachMode && feedbacks.length > 0 && (
+          <div style={{
+            width: 320,
+            background: 'linear-gradient(180deg, #0c0c0f 0%, #09090b 100%)',
+            borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
+            overflow: 'auto',
+          }}>
+            <FeedbackPanel feedbacks={feedbacks} />
+
+            {/* Coaching logs */}
+            {coachingLogs.length > 0 && (
+              <div style={{ padding: 16, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <h3 style={{
+                  margin: '0 0 16px 0',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#a1a1aa',
+                }}>
+                  指导记录
+                </h3>
+                {coachingLogs.map((log) => (
+                  <div key={log.id} style={{
+                    padding: 12,
+                    background: log.agent_response === 'accepted' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: `1px solid ${log.agent_response === 'accepted' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                    borderRadius: 10,
+                    marginBottom: 8,
+                  }}>
+                    <div style={{ fontSize: 12, color: '#71717a', marginBottom: 4 }}>
+                      你：{log.content}
+                    </div>
+                    <div style={{ fontSize: 12, color: log.agent_response === 'accepted' ? '#22c55e' : '#ef4444' }}>
+                      {log.agent_response === 'accepted' ? '✓ 采纳' : '✗ 拒绝'}：{log.agent_feedback}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 右侧评估报告 */}
         {showEval && (
           <div style={{
-            width: 400,
+            width: 420,
             overflow: 'auto',
-            background: '#0c1322',
+            background: 'linear-gradient(180deg, #0c0c0f 0%, #09090b 100%)',
             animation: 'fadeInUp 0.6s ease',
           }}>
             <EvaluationReport evaluation={evaluation} />

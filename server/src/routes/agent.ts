@@ -66,6 +66,9 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的Agent ID' });
+    }
     const agent = agentService.update(id, DEFAULT_USER_ID, req.body);
     if (!agent) {
       return res.status(404).json({ error: 'Agent 不存在' });
@@ -80,6 +83,9 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的Agent ID' });
+    }
     agentService.delete(id, DEFAULT_USER_ID);
     res.json({ message: '删除成功' });
   } catch (error) {

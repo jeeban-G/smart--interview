@@ -10,6 +10,12 @@ const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || '';
 const MINIMAX_API_URL = 'https://api.minimaxi.com/anthropic/v1/messages';
 const MAX_ACTIVE_ROOMS = 10;
 
+// Pause flags for each interview
+const pauseFlags = new Map<number, boolean>();
+
+// Resume signals for each interview (to wake up paused loops)
+const resumeSignals = new Map<number, () => void>();
+
 interface Message {
   id: number;
   interview_id: number;
@@ -236,6 +242,7 @@ const serviceMethods = {
   },
 
   async generateAIResponse(interviewId: number, senderType: string): Promise<string> {
+    console.log(`[AIResponse] Generating response for interview ${interviewId}, senderType=${senderType}`);
     const interview = this.getById(interviewId);
     if (!interview) throw new Error('Interview not found');
 
@@ -300,13 +307,14 @@ const serviceMethods = {
         text = textItem?.text || text;
       }
       return text;
-    } catch (error) {
-      console.error('AI API error:', error);
+    } catch (error: any) {
+      console.error('[AIResponse] API error:', error?.response?.data || error?.message || error);
       return '抱歉，AI 服务暂时不可用。';
     }
   },
 
   async startAgentChat(interviewId: number): Promise<Message[]> {
+    console.log(`[StartAgentChat] Starting for interview ${interviewId}`);
     const interview = this.getById(interviewId);
     if (!interview) throw new Error('Interview not found');
 
@@ -362,7 +370,7 @@ const serviceMethods = {
       // 添加候选人自我介绍消息
       const introMessage = this.addMessage(interviewId, 'ai_candidate', candidateAgent.name, introText);
       // @ts-ignore - this will be an EventEmitter instance at runtime
-      this.emit('message', { interviewId, message: introMessage, agent: 'candidate' });
+      (this as any).emit('message', { interviewId, message: introMessage, agent: 'candidate' });
 
       // 同步生成面试官回应并添加到消息
       const replyMessage = await this.generateInterviewerResponseMessage(interviewId);
@@ -389,10 +397,36 @@ const serviceMethods = {
       `${m.sender_name || m.sender_type}: ${m.content}`
     ).join('\n');
 
-    // 更人性化的面试官提示词
-    const personality = interviewerAgent.personality || interviewerAgent.style || '严谨专业';
+    // 根据公司特点调整面试风格
     const company = interviewerAgent.company || '知名公司';
-    const specialties = interviewerAgent.specialties || '技术面试';
+    const companyStyles: Record<string, { style: string; focus: string; questionType: string }> = {
+      '字节跳动': {
+        style: '高效直接，喜欢挖掘技术深度，追问底层原理',
+        focus: '喜欢问：算法复杂度、系统设计、技术选型理由、性能优化',
+        questionType: '往往先让候选人描述方案，再追问：为什么不用另一种方案'
+      },
+      '阿里巴巴': {
+        style: '技术广度与深度并重，关注工程化和业务理解',
+        focus: '喜欢问：项目规模、团队协作、技术债如何处理、如何验证方案有效性',
+        questionType: '会追问具体数字和结果'
+      },
+      '腾讯': {
+        style: '亲和力强，喜欢循序渐进，关注候选人成长潜力',
+        focus: '喜欢问：学习能力、解决问题的方法论、沟通协作',
+        questionType: '问题层层递进，给你表现的机会'
+      },
+      '美团': {
+        style: '务实派，关注候选人能不能干活',
+        focus: '喜欢问：实际项目经验、最复杂的问题如何解决、代码review经历',
+        questionType: '直接问具体场景和解决方案'
+      },
+      '其他': {
+        style: '严谨专业，关注技术能力和综合素质',
+        focus: '喜欢问：项目经验、技术难点、团队合作',
+        questionType: '根据简历灵活提问'
+      }
+    };
+    const companyInfo = companyStyles[company] || companyStyles['其他'];
 
     // 分析候选人之前的回答，避免重复提问
     const candidateResponses = messages.filter(m => m.sender_type === 'ai_candidate').map(m => m.content);
@@ -402,19 +436,64 @@ const serviceMethods = {
     const hasAskedAboutProjects = askedTopics.includes('项目');
     const hasAskedAboutTech = askedTopics.includes('技术') || askedTopics.includes('React') || askedTopics.includes('TypeScript');
     const hasAskedAboutProblems = askedTopics.includes('问题') || askedTopics.includes('挑战') || askedTopics.includes('困难');
+    const hasAskedAboutSystem = askedTopics.includes('系统') || askedTopics.includes('架构') || askedTopics.includes('设计');
+    const hasAskedAboutTeam = askedTopics.includes('团队') || askedTopics.includes('协作') || askedTopics.includes('合作');
 
+    // 根据公司风格选择下一个话题
     let focusTopic = '';
-    if (!hasAskedAboutProjects) {
-      focusTopic = '请让他介绍一下最让他有成就感的项目，包括项目背景、具体负责的模块、遇到的难点和解决方案。';
-    } else if (!hasAskedAboutProblems) {
-      focusTopic = '请追问一个具体的技术难题，他是如何解决的呢？';
-    } else if (!hasAskedAboutTech) {
-      focusTopic = '请问一下在实际项目中，如何做技术选型？有没有遇到过技术方案争论的情况？';
+    if (company === '字节跳动') {
+      if (!hasAskedAboutSystem) {
+        focusTopic = '请追问系统设计：让他描述一个项目的整体架构，为什么要这样设计？';
+      } else if (!hasAskedAboutTech) {
+        focusTopic = '请追问技术选型：为什么用A技术而不用B技术？';
+      } else if (!hasAskedAboutProblems) {
+        focusTopic = '请追问性能优化：项目中最棘手的性能问题是什么？怎么排查的？';
+      } else {
+        focusTopic = '请追问一个技术细节，比如某个算法的复杂度或者底层原理。';
+      }
+    } else if (company === '阿里巴巴') {
+      if (!hasAskedAboutTeam) {
+        focusTopic = '请追问团队协作：项目中如何与产品/测试沟通？有没有遇到过需求冲突？';
+      } else if (!hasAskedAboutProblems) {
+        focusTopic = '请追问技术挑战：遇到过最大的技术难题是什么？怎么解决的？';
+      } else if (!hasAskedAboutProjects) {
+        focusTopic = '请让他介绍一下项目的技术栈和团队规模。';
+      } else {
+        focusTopic = '请追问项目中的具体技术方案选择和效果评估。';
+      }
+    } else if (company === '腾讯') {
+      if (!hasAskedAboutProblems) {
+        focusTopic = '请追问成长经历：遇到新技术是怎么学习的？有没有失败的经历？';
+      } else if (!hasAskedAboutProjects) {
+        focusTopic = '请让他介绍一下最让你有成就感的项目，你在里面扮演什么角色？';
+      } else if (!hasAskedAboutTeam) {
+        focusTopic = '请追问协作经验：和团队成员意见不一致怎么办？';
+      } else {
+        focusTopic = '请追问一个具体的解决问题的方法或思路。';
+      }
     } else {
-      focusTopic = '请追问一个具体的细节，比如在项目中如何保证代码质量、有没有代码review的经历等。';
+      // 美团和其他公司
+      if (!hasAskedAboutProjects) {
+        focusTopic = '请让他介绍一下最让他有成就感的项目，包括项目背景、具体负责的模块、遇到的难点和解决方案。';
+      } else if (!hasAskedAboutProblems) {
+        focusTopic = '请追问一个具体的技术难题，他是如何解决的呢？';
+      } else if (!hasAskedAboutTech) {
+        focusTopic = '请问一下在实际项目中，如何做技术选型？有没有遇到过技术方案争论的情况？';
+      } else {
+        focusTopic = '请追问一个具体的细节，比如在项目中如何保证代码质量、有没有代码review的经历等。';
+      }
     }
 
-    const systemPrompt = `你是${interviewerAgent.name}，一名${company}的资深面试官，面试风格${personality}，擅长${specialties}。
+    const systemPrompt = `你是${interviewerAgent.name}，${company}的资深面试官。
+
+【你的面试风格】
+${companyInfo.style}
+
+【你关注的重点】
+${companyInfo.focus}
+
+【你的提问方式】
+${companyInfo.questionType}
 
 【重要原则】
 1. 每次只问1个核心问题，深入追问，不要泛泛而问
@@ -428,6 +507,8 @@ const serviceMethods = {
 - ${hasAskedAboutProjects ? '✓ 项目经验' : '○ 项目经验'}
 - ${hasAskedAboutProblems ? '✓ 技术挑战' : '○ 技术挑战'}
 - ${hasAskedAboutTech ? '✓ 技术细节' : '○ 技术细节'}
+- ${hasAskedAboutSystem ? '✓ 系统设计' : '○ 系统设计'}
+- ${hasAskedAboutTeam ? '✓ 团队协作' : '○ 团队协作'}
 
 【当前任务】
 ${focusTopic}
@@ -435,7 +516,7 @@ ${focusTopic}
 【对话历史】
 ${conversationHistory}
 
-请生成面试官的问题，要简短、具体、有针对性。`;
+请生成面试官的问题，要简短、具体、有针对性。符合${company}的面试风格。`;
 
     try {
       const response = await axios.post(
@@ -466,7 +547,7 @@ ${conversationHistory}
       // 添加面试官回复
       const message = this.addMessage(interviewId, 'ai_interviewer', interviewerAgent.name, replyText);
       // @ts-ignore - this will be an EventEmitter instance at runtime
-      this.emit('message', { interviewId, message, agent: 'interviewer' });
+      (this as any).emit('message', { interviewId, message, agent: 'interviewer' });
       return message;
 
     } catch (error: any) {
@@ -482,6 +563,22 @@ ${conversationHistory}
     const messages = this.getMessages(interviewId);
     const interviewerAgent = agentService.getById(interview.interviewer_agent_id);
     const candidateAgent = agentService.getById(interview.candidate_agent_id);
+
+    // Get user profile context
+    const { profileService } = await import('./profile.service.js');
+    const userProfile = profileService.getByUserId(interview.user_id);
+    let profileContext = '';
+    if (userProfile) {
+      profileContext = `
+【用户画像】
+- 目标岗位：${userProfile.target_position || '未设置'}
+- 学历：${userProfile.education || '未设置'}
+- 经验：${userProfile.experience || '未设置'}
+- 技能：${userProfile.skills || '未设置'}
+- 项目经验：${userProfile.projects || '未设置'}
+- 性格：${userProfile.personality || '未设置'}
+`;
+    }
 
     if (!interviewerAgent || !candidateAgent) return null;
 
@@ -520,7 +617,7 @@ ${conversationHistory}
     }
 
     const systemPrompt = `你是${name}，面试前端工程师岗位。
-
+${profileContext}
 【个人背景】
 - 学历：${education}
 - 工作经验：${experience}
@@ -575,7 +672,13 @@ ${conversationHistory}
       // 添加候选人回复
       const message = this.addMessage(interviewId, 'ai_candidate', candidateAgent.name, replyText);
       // @ts-ignore - this will be an EventEmitter instance at runtime
-      this.emit('message', { interviewId, message, agent: 'candidate' });
+      (this as any).emit('message', { interviewId, message, agent: 'candidate' });
+
+      // After candidate response, generate feedback
+      const currentMessages = this.getMessages(interviewId);
+      const round = Math.floor(currentMessages.length / 2);
+      const feedback = await this.generateRealtimeFeedback(interviewId, round);
+
       return message;
 
     } catch (error: any) {
@@ -596,7 +699,7 @@ ${conversationHistory}
 
     // 如果面试已经进行了太多轮（超过20条消息），强制结束
     if (messageCount >= 20) {
-      return { continue: false, reason: '对话已足够深入' };
+      return { continue: false, reason: '对话轮数已达上限' };
     }
 
     // 如果消息数少于4条，说明刚开始，继续
@@ -628,6 +731,42 @@ ${conversationHistory}
       }
     }
 
+    // 检查对话质量：如果最近3轮候选人的回答都很短，可能话题已经充分
+    const recentCandidateMsgs = messages.slice(-6).filter(m => m.sender_type === 'ai_candidate');
+    if (recentCandidateMsgs.length >= 3) {
+      const avgLength = recentCandidateMsgs.reduce((sum, m) => sum + m.content.length, 0) / recentCandidateMsgs.length;
+      if (avgLength < 30) {
+        return { continue: false, reason: '候选人回答趋于简短，话题已充分讨论' };
+      }
+    }
+
+    // 检查是否有重复问题（如果面试官连续问了2个相似的问题）
+    const interviewerMsgs = messages.slice(-4).filter(m => m.sender_type === 'ai_interviewer');
+    if (interviewerMsgs.length >= 2) {
+      const lastTwo = interviewerMsgs.slice(-2);
+      // 简单检查：如果两个问题的内容高度相似（超过50%的词相同），则结束
+      const words1 = new Set(lastTwo[0].content.split(/\s+/));
+      const words2 = new Set(lastTwo[1].content.split(/\s+/));
+      const intersection = [...words1].filter(w => words2.has(w) && w.length > 2);
+      if (intersection.length > words1.size * 0.5) {
+        return { continue: false, reason: '面试官问题趋于重复' };
+      }
+    }
+
+    // 如果已经问了至少6个问题，可以考虑结束（充分面试）
+    if (roundCount >= 6) {
+      // 检查最后几轮是否都在讨论同一个话题
+      const recentTopics = messages.slice(-6).map(m => {
+        // 简单提取话题关键词
+        const keywords = ['项目', '技术', '团队', '架构', '性能', '优化', '难点', '挑战', '协作', '学习'];
+        return keywords.find(k => m.content.includes(k)) || '其他';
+      });
+      const uniqueTopics = new Set(recentTopics);
+      if (uniqueTopics.size <= 2 && roundCount >= 7) {
+        return { continue: false, reason: '话题讨论已充分' };
+      }
+    }
+
     return { continue: true, reason: '对话尚未充分' };
   },
 
@@ -645,50 +784,96 @@ ${conversationHistory}
 
     const newMessages: Message[] = [];
 
-    // 1. 先生成候选人的回复
+    // Check if paused and wait until resumed
+    while (pauseFlags.get(interviewId) === true) {
+      console.log(`[ContinueChat] Interview ${interviewId} is paused, waiting...`);
+      await new Promise<void>(resolve => {
+        resumeSignals.set(interviewId, resolve);
+      });
+      console.log(`[ContinueChat] Interview ${interviewId} resumed!`);
+    }
+
+    // 1. 发送候选人正在输入的提示
+    (this as any).emit('typing', { interviewId, agent: 'candidate' });
+
+    // 2. 先生成候选人的回复
     const candidateResponse = await this.generateCandidateResponseMessage(interviewId);
     if (candidateResponse) {
       newMessages.push(candidateResponse);
+      // 通过 SSE 发送给客户端
+      (this as any).emit('message', { interviewId, message: candidateResponse, agent: 'candidate' });
     } else {
       return { messages: [], shouldContinue: false };
     }
 
-    // 2. 等待一下再生成面试官的回复（模拟思考时间）
+    // 3. 等待一下再生成面试官的回复（模拟思考时间）
     await new Promise(resolve => setTimeout(resolve, 6000));
 
-    // 3. 检查是否应该继续
+    // Check if paused again before interviewer response
+    while (pauseFlags.get(interviewId) === true) {
+      await new Promise<void>(resolve => {
+        resumeSignals.set(interviewId, resolve);
+      });
+    }
+
+    // 4. 发送面试官正在输入的提示
+    (this as any).emit('typing', { interviewId, agent: 'interviewer' });
+
+    // 5. 检查是否应该继续
     const { continue: shouldContinue } = this.shouldContinueInterview(interviewId);
     if (!shouldContinue) {
       // 如果不应该继续，返回候选人消息但不继续面试官回复
       return { messages: newMessages, shouldContinue: false };
     }
 
-    // 4. 生成面试官的回复
+    // 6. 生成面试官的回复
     const interviewerResponse = await this.generateInterviewerResponseMessage(interviewId);
     if (interviewerResponse) {
       newMessages.push(interviewerResponse);
+      // 通过 SSE 发送给客户端
+      (this as any).emit('message', { interviewId, message: interviewerResponse, agent: 'interviewer' });
     }
 
     return { messages: newMessages, shouldContinue };
   },
 
   async startBackgroundChat(interviewId: number): Promise<void> {
+    console.log(`[BackgroundChat] Starting background chat for interview ${interviewId}`);
     const interview = this.getById(interviewId);
-    if (!interview) return;
+    if (!interview) {
+      console.log(`[BackgroundChat] Interview ${interviewId} not found`);
+      return;
+    }
+
+    console.log(`[BackgroundChat] Interview ${interviewId}: candidate_agent_id=${interview.candidate_agent_id}, interviewer_agent_id=${interview.interviewer_agent_id}`);
 
     // Start with initial agent chat
     const initialMessages = await this.startAgentChat(interviewId);
-    if (initialMessages.length === 0) return;
+    console.log(`[BackgroundChat] Initial messages count: ${initialMessages.length}`);
+    if (initialMessages.length === 0) {
+      console.log(`[BackgroundChat] No initial messages, returning`);
+      return;
+    }
 
     // Emit typing event to indicate conversation is starting
     // @ts-ignore - this will be an EventEmitter instance at runtime
-    this.emit('typing', { interviewId, agent: 'interviewer' });
+    (this as any).emit('typing', { interviewId, agent: 'interviewer' });
 
     // Continue the conversation loop
     let shouldContinue = true;
     while (shouldContinue) {
       // Wait for the thinking time (same as client-side delay)
       await new Promise(resolve => setTimeout(resolve, 6000));
+
+      // Check if paused and wait until resumed
+      while (pauseFlags.get(interviewId) === true) {
+        console.log(`[BackgroundChat] Interview ${interviewId} is paused, waiting...`);
+        // Create a promise that resolves when resumed
+        await new Promise<void>(resolve => {
+          resumeSignals.set(interviewId, resolve);
+        });
+        console.log(`[BackgroundChat] Interview ${interviewId} resumed!`);
+      }
 
       // Check if interview still exists and should continue
       const currentInterview = this.getById(interviewId);
@@ -702,7 +887,51 @@ ${conversationHistory}
       if (shouldContinue) {
         // Emit typing event for next round
         // @ts-ignore - this will be an EventEmitter instance at runtime
-    this.emit('typing', { interviewId, agent: 'interviewer' });
+    (this as any).emit('typing', { interviewId, agent: 'interviewer' });
+      }
+    }
+
+    // Interview is complete
+    if (this.getById(interviewId)?.status !== 'completed') {
+      this.complete(interviewId);
+    }
+  },
+
+  // 继续已有对话（不重新开始自我介绍）
+  continueBackgroundChat(interviewId: number): void {
+    console.log(`[ContinueBackgroundChat] Continuing chat for interview ${interviewId}`);
+
+    // 在后台异步执行对话循环
+    this.continueChatLoop(interviewId);
+  },
+
+  async continueChatLoop(interviewId: number): Promise<void> {
+    // Continue the conversation loop
+    let shouldContinue = true;
+    while (shouldContinue) {
+      // Wait for the thinking time
+      await new Promise(resolve => setTimeout(resolve, 6000));
+
+      // Check if paused and wait until resumed
+      while (pauseFlags.get(interviewId) === true) {
+        await new Promise<void>(resolve => {
+          resumeSignals.set(interviewId, resolve);
+        });
+      }
+
+      // Check if interview still exists and should continue
+      const currentInterview = this.getById(interviewId);
+      if (!currentInterview || currentInterview.status === 'completed') {
+        break;
+      }
+
+      const { shouldContinue: cont } = await this.continueAgentChat(interviewId);
+      shouldContinue = cont;
+
+      if (shouldContinue) {
+        // Emit typing event for next round
+        // @ts-ignore - this will be an EventEmitter instance at runtime
+        (this as any).emit('typing', { interviewId, agent: 'interviewer' });
       }
     }
 
@@ -720,7 +949,27 @@ ${conversationHistory}
     stmt.run([interviewId]);
     saveDb();
     // @ts-ignore - this will be an EventEmitter instance at runtime
-    this.emit('done', { interviewId });
+    (this as any).emit('done', { interviewId });
+    // Clean up pause state
+    pauseFlags.delete(interviewId);
+    resumeSignals.delete(interviewId);
+  },
+
+  pauseChat(interviewId: number) {
+    pauseFlags.set(interviewId, true);
+    // @ts-ignore - this will be an EventEmitter instance at runtime
+    (this as any).emit('paused', { interviewId });
+  },
+
+  resumeChat(interviewId: number) {
+    pauseFlags.set(interviewId, false);
+    // @ts-ignore - this will be an EventEmitter instance at runtime
+    (this as any).emit('resumed', { interviewId });
+    // If there's a resume signal, call it to wake up the loop
+    const signal = resumeSignals.get(interviewId);
+    if (signal) {
+      signal();
+    }
   },
 
   getEvaluation(interviewId: number) {
@@ -760,12 +1009,14 @@ ${conversationHistory}
 ${conversationHistory}
 
 请给出以下格式的评估:
-1. 总体评价 (summary)
-2. 优点 (pros)
-3. 不足之处 (cons)
-4. 改进建议 (suggestions)
+1. 总体评价 (summary): 对候选人整体表现的评价
+2. 亮点时刻 (highlights): 候选人回答得最好的2-3个时刻，描述问题和精彩回答
+3. 优点 (pros): 面试中展现的优点
+4. 不足之处 (cons): 面试中暴露的不足
+5. 改进建议 (suggestions): 针对不足的具体改进建议
 
-请用JSON格式返回。`;
+请用JSON格式返回:
+{"summary": "...", "highlights": [{"question": "...", "answer": "..."}, ...], "pros": [...], "cons": [...], "suggestions": [...]}`
 
     try {
       const response = await axios.post(
@@ -795,9 +1046,16 @@ ${conversationHistory}
       }
       let evaluation;
       try {
-        evaluation = JSON.parse(contentText);
+        // Remove markdown code fences if present
+        const cleanText = contentText.replace(/^```json\s*/g, '').replace(/\s*```$/g, '').trim();
+        evaluation = JSON.parse(cleanText);
       } catch {
-        evaluation = { summary: contentText, pros: '', cons: '', suggestions: '' };
+        evaluation = { summary: contentText, highlights: [], pros: '', cons: '', suggestions: '' };
+      }
+
+      // 确保highlights是数组格式
+      if (!Array.isArray(evaluation.highlights)) {
+        evaluation.highlights = [];
       }
 
       // 保存评估
@@ -814,7 +1072,70 @@ ${conversationHistory}
       return evaluation;
     } catch (error) {
       console.error('Evaluation API error:', error);
-      return { summary: '评估生成失败', pros: '', cons: '', suggestions: '' };
+      return { summary: '评估生成失败', highlights: [], pros: '', cons: '', suggestions: '' };
+    }
+  },
+
+  async generateRealtimeFeedback(interviewId: number, round: number): Promise<string> {
+    const interview = this.getById(interviewId);
+    if (!interview) return '';
+
+    const messages = this.getMessages(interviewId);
+    const recentMessages = messages.slice(-4); // Last 2 exchanges
+    const conversationHistory = recentMessages.map(m =>
+      `${m.sender_name || m.sender_type}: ${m.content}`
+    ).join('\n');
+
+    const feedbackPrompt = `作为一个专业的面试教练，请对求职者最近一轮的表现提供实时反馈。
+
+【最近对话】
+${conversationHistory}
+
+请给出简短的反馈（30字以内），指出：
+1. 回答中做得好的地方
+2. 需要改进的地方
+3. 具体建议
+
+只返回反馈内容，不要其他解释。`;
+
+    try {
+      const response = await axios.post(
+        MINIMAX_API_URL,
+        {
+          model: 'MiniMax-M2.7',
+          max_tokens: 256,
+          messages: [
+            { role: 'system', content: '你是一个专业的面试教练，提供简洁有用的实时反馈。' },
+            { role: 'user', content: feedbackPrompt }
+          ]
+        },
+        {
+          headers: {
+            'x-api-key': MINIMAX_API_KEY,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const content = response.data.content;
+      let feedback = '';
+      if (Array.isArray(content)) {
+        const textItem = content.find((c: any) => c.type === 'text');
+        feedback = textItem?.text || '';
+      }
+
+      // Save feedback to database
+      if (feedback) {
+        const { feedbackService } = await import('./feedback.service.js');
+        feedbackService.create(interviewId, round, 'realtime', feedback);
+        // Emit feedback event via SSE
+        (this as any).emit('feedback', { interviewId, content: feedback, round });
+      }
+
+      return feedback;
+    } catch (error) {
+      console.error('Feedback generation error:', error);
+      return '';
     }
   },
 
@@ -835,6 +1156,121 @@ ${conversationHistory}
       console.error('Delete interview error:', error);
       return false;
     }
+  },
+
+  async evaluateCoachingGuidance(coachingContent: string, conversationHistory: string, candidateProfile: string): Promise<{ accepted: boolean; reason: string; appliedContent?: string }> {
+    const prompt = `【场景】你是一个友好的求职教练，帮助用户（面试官）更好地指导候选人。
+
+【用户指导】"${coachingContent}"
+
+【候选人背景】${candidateProfile}
+
+【最近对话历史】
+${conversationHistory}
+
+【判断标准】（重点看前两条）
+1. 指导是否有助于候选人展示优势或弥补不足？
+2. 指导是否不会让候选人尴尬或难堪？
+3. 指导是否与面试内容相关？
+
+【重要原则】
+- 只要指导不是明显错误、恶意或完全无关，就应该采纳
+- 即使指导有些模糊，也可以采纳并给出具体化建议
+- 拒绝应该是因为明确的、严重的问题
+
+返回JSON：{"decision": "采纳或拒绝", "reason": "原因", "appliedContent": "如果采纳，给出如何应用这个指导的候选人回复示例"}`;
+
+    try {
+      const response = await axios.post(
+        MINIMAX_API_URL,
+        {
+          model: 'MiniMax-M2.7',
+          max_tokens: 2000,
+          messages: [
+            { role: 'system', content: '你是一个友好的求职教练。严格只返回JSON，不要任何其他内容。格式：{"decision": "采纳"或"拒绝", "reason": "原因", "appliedContent": "如果采纳给出候选人回复示例"}' },
+            { role: 'user', content: prompt }
+          ]
+        },
+        {
+          headers: {
+            'x-api-key': MINIMAX_API_KEY,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const content = response.data.content;
+      let text = '{"decision": "拒绝", "reason": "无法判断", "appliedContent": ""}';
+      if (Array.isArray(content)) {
+        // First try to find text type (preferred - no thinking)
+        const textItem = content.find((c: any) => c.type === 'text');
+        if (textItem?.text) {
+          text = textItem.text;
+        } else {
+          // Fall back to thinking type and extract JSON from it
+          const thinkingItem = content.find((c: any) => c.type === 'thinking');
+          if (thinkingItem?.thinking) {
+            // Try to find JSON object in the thinking text
+            const jsonMatch = thinkingItem.thinking.match(/\{[\s\S]*?"decision"[\s\S]*?\}/);
+            if (jsonMatch) {
+              text = jsonMatch[0];
+            }
+          }
+        }
+      }
+      // Remove markdown code fences if present
+      text = text.replace(/^```json\s*/g, '').replace(/\s*```$/g, '').trim();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        // Try to extract JSON object from potentially malformed response
+        const jsonMatch = text.match(/\{[\s\S]*?\}/);
+        if (jsonMatch) {
+          try {
+            result = JSON.parse(jsonMatch[0]);
+          } catch {
+            return { accepted: false, reason: '响应格式解析失败' };
+          }
+        } else {
+          return { accepted: false, reason: '响应格式解析失败' };
+        }
+      }
+      return {
+        accepted: result.decision === '采纳',
+        reason: result.reason || '',
+        appliedContent: result.appliedContent || '',
+      };
+    } catch (error) {
+      console.error('Coaching evaluation error:', error);
+      return { accepted: false, reason: '服务暂时不可用' };
+    }
+  },
+
+  async processCoaching(interviewId: number, coachingContent: string): Promise<{ accepted: boolean; reason: string; appliedContent?: string }> {
+    const interview = this.getById(interviewId);
+    if (!interview) return { accepted: false, reason: '面试不存在' };
+
+    const messages = this.getMessages(interviewId);
+    const conversationHistory = messages.map(m =>
+      `${m.sender_name || m.sender_type}: ${m.content}`
+    ).join('\n');
+
+    // Get candidate profile
+    const { profileService } = await import('./profile.service.js');
+    const userProfile = profileService.getByUserId(interview.user_id);
+    const candidateProfile = userProfile ? `目标岗位：${userProfile.target_position || ''}，技能：${userProfile.skills || ''}，经验：${userProfile.experience || ''}` : '未设置';
+
+    const result = await this.evaluateCoachingGuidance(coachingContent, conversationHistory, candidateProfile);
+
+    // Emit coaching events
+    if (result.accepted) {
+      (this as any).emit('coaching_accepted', { interviewId, original: coachingContent, applied: result.appliedContent });
+    } else {
+      (this as any).emit('coaching_rejected', { interviewId, original: coachingContent, reason: result.reason });
+    }
+
+    return result;
   }
 };
 

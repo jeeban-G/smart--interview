@@ -50,52 +50,34 @@ router.get('/positions', (req, res) => {
   const positions = [
     // 字节跳动
     { id: 'bd-fe-001', name: '字节跳动', position: '前端工程师', tag: '急招', salary: '35-70K·16薪', location: '北京' },
-    { id: 'bd-fe-002', name: '字节跳动', position: '前端工程师', tag: '已发布', salary: '30-55K·16薪', location: '上海' },
     { id: 'bd-be-001', name: '字节跳动', position: '后端工程师', tag: '急招', salary: '40-75K·16薪', location: '北京' },
-    { id: 'bd-be-002', name: '字节跳动', position: 'Go开发工程师', tag: '已发布', salary: '38-65K·16薪', location: '杭州' },
     { id: 'bd-alg-001', name: '字节跳动', position: '算法工程师', tag: '急招', salary: '50-90K·16薪', location: '北京' },
-    { id: 'bd-alg-002', name: '字节跳动', position: 'NLP算法工程师', tag: '急招', salary: '55-85K·16薪', location: '北京' },
-    { id: 'bd-ml-001', name: '字节跳动', position: '机器学习工程师', tag: '已发布', salary: '45-80K·16薪', location: '上海' },
-    { id: 'bd-ops-001', name: '字节跳动', position: '运营专员', tag: '已发布', salary: '15-28K·14薪', location: '北京' },
 
     // 阿里巴巴
     { id: 'ali-fe-001', name: '阿里巴巴', position: '前端工程师', tag: '已发布', salary: '30-55K·16薪', location: '杭州' },
-    { id: 'ali-fe-002', name: '阿里巴巴', position: '前端工程师', tag: '已发布', salary: '28-48K·16薪', location: '北京' },
     { id: 'ali-be-001', name: '阿里巴巴', position: 'Java开发工程师', tag: '已发布', salary: '32-58K·16薪', location: '杭州' },
-    { id: 'ali-be-002', name: '阿里巴巴', position: '后端工程师', tag: '已发布', salary: '30-52K·16薪', location: '上海' },
     { id: 'ali-alg-001', name: '阿里巴巴', position: '算法工程师', tag: '急招', salary: '45-80K·16薪', location: '杭州' },
-    { id: 'ali-cloud-001', name: '阿里云', position: '后端工程师', tag: '已发布', salary: '35-60K·16薪', location: '杭州' },
     { id: 'ali-product-001', name: '阿里巴巴', position: '产品经理', tag: '已发布', salary: '28-50K·16薪', location: '杭州' },
 
     // 腾讯
     { id: 'tx-fe-001', name: '腾讯', position: '前端工程师', tag: '已发布', salary: '28-55K·14薪', location: '深圳' },
-    { id: 'tx-fe-002', name: '腾讯', position: '前端工程师', tag: '已发布', salary: '25-45K·14薪', location: '广州' },
     { id: 'tx-be-001', name: '腾讯', position: '后台开发工程师', tag: '已发布', salary: '30-58K·14薪', location: '深圳' },
-    { id: 'tx-be-002', name: '腾讯', position: 'C++后台开发', tag: '已发布', salary: '32-55K·14薪', location: '深圳' },
     { id: 'tx-alg-001', name: '腾讯', position: 'AI算法工程师', tag: '急招', salary: '40-75K·14薪', location: '深圳' },
-    { id: 'tx-game-001', name: '腾讯', position: '游戏前端开发', tag: '已发布', salary: '30-50K·14薪', location: '深圳' },
-    { id: 'tx-product-001', name: '腾讯', position: '产品经理', tag: '已发布', salary: '25-45K·14薪', location: '深圳' },
 
     // 美团
     { id: 'mt-fe-001', name: '美团', position: '前端工程师', tag: '已发布', salary: '25-48K·15薪', location: '北京' },
-    { id: 'mt-fe-002', name: '美团', position: '前端工程师', tag: '已发布', salary: '22-40K·15薪', location: '上海' },
     { id: 'mt-be-001', name: '美团', position: '后端工程师', tag: '已发布', salary: '27-50K·15薪', location: '北京' },
-    { id: 'mt-be-002', name: '美团', position: 'Java开发工程师', tag: '已发布', salary: '25-45K·15薪', location: '深圳' },
     { id: 'mt-alg-001', name: '美团', position: '算法工程师', tag: '急招', salary: '35-65K·15薪', location: '北京' },
-    { id: 'mt-data-001', name: '美团', position: '数据工程师', tag: '已发布', salary: '28-50K·15薪', location: '北京' },
 
     // 京东
     { id: 'jd-fe-001', name: '京东', position: '前端工程师', tag: '已发布', salary: '22-42K·18薪', location: '北京' },
     { id: 'jd-be-001', name: '京东', position: '后端工程师', tag: '已发布', salary: '25-48K·18薪', location: '北京' },
-    { id: 'jd-be-002', name: '京东', position: 'Java开发工程师', tag: '已发布', salary: '22-40K·18薪', location: '上海' },
     { id: 'jd-alg-001', name: '京东', position: '算法工程师', tag: '急招', salary: '35-60K·18薪', location: '北京' },
 
     // 百度
     { id: 'bd-ft-001', name: '百度', position: '前端工程师', tag: '已发布', salary: '25-48K·14薪', location: '北京' },
-    { id: 'bd-ft-002', name: '百度', position: '前端工程师', tag: '已发布', salary: '22-40K·14薪', location: '深圳' },
     { id: 'bd-ft-003', name: '百度', position: '后端工程师', tag: '已发布', salary: '28-52K·14薪', location: '北京' },
     { id: 'bd-ft-alg-001', name: '百度', position: '算法工程师', tag: '急招', salary: '40-70K·14薪', location: '北京' },
-    { id: 'bd-ft-alg-002', name: '百度', position: '自动驾驶算法工程师', tag: '急招', salary: '50-85K·14薪', location: '北京' },
 
     // 小米
     { id: 'xm-fe-001', name: '小米', position: '前端工程师', tag: '已发布', salary: '20-40K·14薪', location: '北京' },
@@ -103,8 +85,8 @@ router.get('/positions', (req, res) => {
     { id: 'xm-alg-001', name: '小米', position: '算法工程师', tag: '已发布', salary: '30-55K·14薪', location: '北京' },
 
     // 华为
-    { id: 'hw-be-001', name: '华为', position: '后端工程师', tag: '已发布', salary: '28-55K·15薪', location: '深圳' },
     { id: 'hw-fe-001', name: '华为', position: '前端工程师', tag: '已发布', salary: '25-48K·15薪', location: '杭州' },
+    { id: 'hw-be-001', name: '华为', position: '后端工程师', tag: '已发布', salary: '28-55K·15薪', location: '深圳' },
     { id: 'hw-alg-001', name: '华为', position: '算法工程师', tag: '急招', salary: '35-65K·15薪', location: '深圳' },
 
     // 快手
@@ -120,12 +102,10 @@ router.get('/positions', (req, res) => {
     // 滴滴
     { id: 'dd-fe-001', name: '滴滴', position: '前端工程师', tag: '已发布', salary: '22-40K·15薪', location: '北京' },
     { id: 'dd-be-001', name: '滴滴', position: '后端工程师', tag: '已发布', salary: '25-48K·15薪', location: '北京' },
-    { id: 'dd-alg-001', name: '滴滴', position: '算法工程师', tag: '已发布', salary: '35-60K·15薪', location: '北京' },
 
     // 拼多多
     { id: 'pdd-fe-001', name: '拼多多', position: '前端工程师', tag: '已发布', salary: '35-60K·12薪', location: '上海' },
     { id: 'pdd-be-001', name: '拼多多', position: '后端工程师', tag: '已发布', salary: '40-70K·12薪', location: '上海' },
-    { id: 'pdd-alg-001', name: '拼多多', position: '算法工程师', tag: '急招', salary: '50-80K·12薪', location: '上海' },
   ];
   res.json(positions);
 });
@@ -134,6 +114,7 @@ router.get('/positions', (req, res) => {
 router.post('/create', async (req, res) => {
   try {
     const { type, position, candidate_agent_id, interviewer_agent_id } = req.body;
+    console.log(`[Create] Creating interview: type=${type}, position=${position}, candidate_agent_id=${candidate_agent_id}, interviewer_agent_id=${interviewer_agent_id}`);
     if (!type || !position) {
       return res.status(400).json({ error: '缺少必要参数' });
     }
@@ -143,9 +124,11 @@ router.post('/create', async (req, res) => {
 
     try {
       const interview = interviewService.create(DEFAULT_USER_ID, type, position, candidate_agent_id, interviewer_agent_id);
+      console.log(`[Create] Interview created with id=${interview.id}`);
 
       // 如果同时有候选人和面试官 Agent，自动开始对话
       if (candidate_agent_id && interviewer_agent_id) {
+        console.log(`[Create] Starting background chat for interview ${interview.id}`);
         // Start background conversation (runs on server, pushes via SSE)
         setTimeout(() => interviewService.startBackgroundChat(interview.id), 100);
         res.json(interview);
@@ -207,8 +190,15 @@ router.get('/:id', (req, res) => {
 router.post('/:id/message', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const { content, sender_type, sender_name } = req.body;
     const resolvedSenderType = sender_type || 'user';
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: '消息内容不能为空' });
+    }
 
     const interview = interviewService.getById(id);
     if (!interview) {
@@ -256,6 +246,9 @@ router.post('/:id/message', async (req, res) => {
 router.get('/:id/next', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const interview = interviewService.getById(id);
 
     if (!interview) {
@@ -275,6 +268,9 @@ router.get('/:id/next', async (req, res) => {
 router.post('/:id/continue', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const interview = interviewService.getById(id);
 
     if (!interview) {
@@ -298,6 +294,9 @@ router.post('/:id/continue', async (req, res) => {
 router.get('/:id/status', (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const interview = interviewService.getById(id);
 
     if (!interview) {
@@ -318,6 +317,9 @@ router.get('/:id/status', (req, res) => {
 router.get('/:id/messages', (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const interview = interviewService.getById(id);
 
     if (!interview) {
@@ -335,6 +337,9 @@ router.get('/:id/messages', (req, res) => {
 router.get('/:id/eval', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const interview = interviewService.getById(id);
 
     if (!interview) {
@@ -364,6 +369,9 @@ router.get('/:id/eval', async (req, res) => {
 router.post('/:id/complete', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
     const interview = interviewService.getById(id);
 
     if (!interview) {
@@ -379,6 +387,70 @@ router.post('/:id/complete', async (req, res) => {
   } catch (error) {
     console.error('Complete interview error:', error);
     res.status(500).json({ error: '结束面试失败' });
+  }
+});
+
+// 开始面试（触发后台对话）
+router.post('/:id/start', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const interview = interviewService.getById(id);
+
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+
+    if (interview.status === 'completed') {
+      return res.status(400).json({ error: '面试已结束' });
+    }
+
+    // 检查是否已经有消息，有的话继续对话，没有才启动新对话
+    const messages = interviewService.getMessages(id);
+    if (messages.length > 0) {
+      // 已经有消息，继续对话
+      interviewService.continueBackgroundChat(id);
+      res.json({ message: '面试已继续' });
+    } else {
+      // 没有消息，启动新对话
+      interviewService.startBackgroundChat(id);
+      res.json({ message: '面试已开始' });
+    }
+  } catch (error) {
+    console.error('Start interview error:', error);
+    res.status(500).json({ error: '开始面试失败' });
+  }
+});
+
+// 暂停面试
+router.post('/:id/pause', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    interviewService.pauseChat(id);
+    res.json({ message: '面试已暂停' });
+  } catch (error) {
+    console.error('Pause interview error:', error);
+    res.status(500).json({ error: '暂停面试失败' });
+  }
+});
+
+// 继续面试
+router.post('/:id/resume', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    interviewService.resumeChat(id);
+    res.json({ message: '面试已继续' });
+  } catch (error) {
+    console.error('Resume interview error:', error);
+    res.status(500).json({ error: '继续面试失败' });
   }
 });
 
@@ -401,6 +473,93 @@ router.delete('/:id', (req, res) => {
   } catch (error) {
     console.error('Delete interview error:', error);
     res.status(500).json({ error: '删除失败' });
+  }
+});
+
+// Get feedback for an interview
+router.get('/:id/feedback', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const { feedbackService } = await import('../services/feedback.service.js');
+    const feedbacks = feedbackService.getByInterviewId(id);
+    res.json(feedbacks);
+  } catch (error) {
+    res.status(500).json({ error: '获取反馈失败' });
+  }
+});
+
+// Add coaching log
+router.post('/:id/coaching', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const { coaching_type, content } = req.body;
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: '指导内容不能为空' });
+    }
+    const { coachingService } = await import('../services/coaching.service.js');
+    const log = coachingService.create(id, DEFAULT_USER_ID, coaching_type || 'info_request', content);
+    res.json(log);
+  } catch (error) {
+    res.status(500).json({ error: '记录指导失败' });
+  }
+});
+
+// Get coaching logs for an interview
+router.get('/:id/coaching', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const { coachingService } = await import('../services/coaching.service.js');
+    const logs = coachingService.getByInterviewId(id);
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: '获取指导记录失败' });
+  }
+});
+
+// Process coaching guidance
+router.post('/:id/coach', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const { content } = req.body;
+
+    // Validate input
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: '指导内容不能为空' });
+    }
+
+    const result = await interviewService.processCoaching(id, content);
+
+    // Record the coaching log
+    const coachingType = content.includes('补充') || content.includes('例子') ? 'guide' :
+                         content.includes('纠正') || content.includes('不对') ? 'correct' : 'info_request';
+    const { coachingService } = await import('../services/coaching.service.js');
+
+    try {
+      const log = coachingService.create(id, DEFAULT_USER_ID, coachingType, content);
+      if (log) {
+        coachingService.updateResponse(log.id, result.accepted ? 'accepted' : 'rejected', result.reason);
+      }
+    } catch (dbError) {
+      console.error('Failed to record coaching log:', dbError);
+      // Continue anyway - the result is what matters
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Coach error:', error);
+    res.status(500).json({ error: '处理指导失败' });
   }
 });
 
