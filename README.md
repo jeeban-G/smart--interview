@@ -124,19 +124,26 @@ smart--interview/
 - Node.js >= 18.0.0
 - npm >= 9.0.0
 
-### 1. 配置环境变量
+### 1. 克隆项目
 
 ```bash
-cd server
-cp .env.example .env  # 如果有 example 文件
+git clone https://github.com/jeeban-G/smart--interview.git
+cd smart--interview
 ```
 
-编辑 `server/.env`:
+### 2. 配置环境变量
+
+```bash
+cp server/.env.example server/.env
+```
+
+编辑 `server/.env`，填入你的 MiniMax API Key：
 
 ```env
-PORT=3001
 MINIMAX_API_KEY=your_minimax_api_key_here
 ```
+
+> 获取 API Key: https://platform.minimaxi.com/
 
 ### 2. 安装依赖
 
