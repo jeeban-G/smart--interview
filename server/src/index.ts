@@ -9,6 +9,7 @@ import interviewRoutes from './routes/interview.js';
 import agentRoutes from './routes/agent.js';
 import profileRoutes from './routes/profile.js';
 import { clients } from './routes/interview.js';
+import './config.js'; // Validates required env vars when accessed
 
 dotenv.config();
 

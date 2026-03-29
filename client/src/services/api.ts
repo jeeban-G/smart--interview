@@ -1,14 +1,49 @@
-import type { Agent, UserProfile, CoachingLog, InterviewFeedback } from '../types';
+import type { Agent, UserProfile, CoachingLog, InterviewFeedback, Message } from '../types';
 
 const API_BASE = '/api';
 
+// 获取 token
+function getToken(): string | null {
+  return localStorage.getItem('token');
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
+
+  // 创建 Headers 对象
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+  });
+
+  // 添加额外的 headers
+  if (options?.headers) {
+    const existingHeaders = new Headers(options.headers);
+    existingHeaders.forEach((value, key) => {
+      headers.append(key, value);
+    });
+  }
+
+  // 如果有 token，添加到请求头
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   const response = await fetch(`${API_BASE}${url}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers,
   });
 
   if (!response.ok) {
+    // 如果是 401 错误，可能 token 过期，清除本地认证信息
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      // 可以在这里触发重定向到登录页
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+
     const error = await response.json().catch(() => ({ error: '请求失败' }));
     throw new Error(error.error || '请求失败');
   }
@@ -39,11 +74,11 @@ export const api = {
 
   getMessages: (id: number) => request(`/interview/${id}/messages`),
 
-  getNextMessages: (id: number) => request<{ messages: any[] }>(`/interview/${id}/next`),
+  getNextMessages: (id: number) => request<{ messages: Message[] }>(`/interview/${id}/next`),
 
-  continueAgentChat: (id: number) => request<{ messages: any[]; shouldContinue: boolean }>(`/interview/${id}/continue`, { method: 'POST' }),
+  continueAgentChat: (id: number) => request<{ messages: Message[]; shouldContinue: boolean }>(`/interview/${id}/continue`, { method: 'POST' }),
 
-  getInterviewStatus: (id: number) => request<{ status: string; continue: boolean; reason: string }>(`/interview/${id}/status`),
+  getInterviewStatus: (id: number) => request<{ status: string; shouldContinue: boolean; reason?: string }>(`/interview/${id}/status`),
 
   getEvaluation: (id: number) => request(`/interview/${id}/eval`),
 

@@ -1,23 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+
+type Emotion = 'neutral' | 'happy' | 'thinking' | 'surprised' | 'sad' | 'confused';
 
 interface MangaCharacterProps {
   type: 'interviewer' | 'candidate' | 'user';
-  isTyping?: boolean;
+  emotion?: Emotion;
+  size?: number;
 }
 
-// 漫画风格人物组件
-function MangaAvatar({ type, isTyping }: { type: 'interviewer' | 'candidate' | 'user'; isTyping?: boolean }) {
+// 漫画风格小头像组件
+function MangaAvatar({ type, emotion = 'neutral', size = 40 }: { type: 'interviewer' | 'candidate' | 'user'; emotion?: Emotion; size?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [expression, setExpression] = useState<'neutral' | 'happy' | 'thinking' | 'surprised'>('neutral');
-
-  // 更新表情
-  useEffect(() => {
-    if (isTyping) {
-      setExpression('thinking');
-    } else {
-      setExpression('neutral');
-    }
-  }, [isTyping]);
 
   // 绘制漫画人物
   useEffect(() => {
@@ -27,187 +20,157 @@ function MangaAvatar({ type, isTyping }: { type: 'interviewer' | 'candidate' | '
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = 120;
-    const height = 160;
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = size;
+    canvas.height = size;
 
     // 清空画布
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, size, size);
 
     // 颜色配置
     const colors = {
-      interviewer: { hair: '#2c2c2c', skin: '#ffe4c4', outfit: '#1a1a2e', accent: '#ffd700' },
-      candidate: { hair: '#4a3728', skin: '#ffe4c4', outfit: '#3d5a80', accent: '#6bcbff' },
-      user: { hair: '#8b5cf6', skin: '#ffe4c4', outfit: '#5c6bc0', accent: '#a855f7' },
+      interviewer: { bg: '#667eea', skin: '#ffe4c4', hair: '#2c2c2c' },
+      candidate: { bg: '#22c55e', skin: '#ffe4c4', hair: '#4a3728' },
+      user: { bg: '#6bcbff', skin: '#ffe4c4', hair: '#8b5cf6' },
     };
     const c = colors[type];
 
-    // 头发形状 - 动漫风格大头发
+    // 背景圆
+    ctx.fillStyle = c.bg;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 头部比例
+    const headSize = size * 0.5;
+    const headX = size / 2;
+    const headY = size / 2 - 2;
+
+    // 头发
     ctx.fillStyle = c.hair;
     ctx.beginPath();
-    // 后脑勺
-    ctx.ellipse(60, 50, 38, 42, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // 刘海
-    ctx.beginPath();
-    ctx.moveTo(25, 35);
-    ctx.quadraticCurveTo(60, 15, 95, 35);
-    ctx.quadraticCurveTo(85, 45, 80, 55);
-    ctx.lineTo(40, 55);
-    ctx.quadraticCurveTo(35, 45, 25, 35);
-    ctx.fill();
-    // 侧边头发
-    ctx.beginPath();
-    ctx.moveTo(25, 45);
-    ctx.quadraticCurveTo(20, 70, 25, 90);
-    ctx.lineTo(30, 90);
-    ctx.quadraticCurveTo(28, 70, 30, 50);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(95, 45);
-    ctx.quadraticCurveTo(100, 70, 95, 90);
-    ctx.lineTo(90, 90);
-    ctx.quadraticCurveTo(92, 70, 90, 50);
+    ctx.arc(headX, headY - headSize * 0.1, headSize * 0.45, 0, Math.PI * 2);
     ctx.fill();
 
     // 脸部
     ctx.fillStyle = c.skin;
     ctx.beginPath();
-    ctx.ellipse(60, 65, 28, 32, 0, 0, Math.PI * 2);
+    ctx.arc(headX, headY + headSize * 0.1, headSize * 0.35, 0, Math.PI * 2);
     ctx.fill();
 
-    // 脖子
-    ctx.fillStyle = c.skin;
-    ctx.fillRect(50, 92, 20, 15);
-
-    // 衣服/身体
-    ctx.fillStyle = c.outfit;
-    ctx.beginPath();
-    ctx.moveTo(30, 105);
-    ctx.lineTo(25, 160);
-    ctx.lineTo(95, 160);
-    ctx.lineTo(90, 105);
-    ctx.closePath();
-    ctx.fill();
-
-    // 领口
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.moveTo(45, 105);
-    ctx.lineTo(60, 120);
-    ctx.lineTo(75, 105);
-    ctx.closePath();
-    ctx.fill();
-
-    // 表情
-    const eyeY = 60;
-
-    // 左眼
+    // 眼睛
+    const eyeY = headY + headSize * 0.05;
+    const eyeSpacing = headSize * 0.2;
     ctx.fillStyle = '#1a1a2e';
-    ctx.beginPath();
-    ctx.ellipse(48, eyeY, 5, expression === 'surprised' ? 7 : 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // 左眼高光
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.ellipse(50, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
-    ctx.fill();
 
-    // 右眼
-    ctx.fillStyle = '#1a1a2e';
-    ctx.beginPath();
-    ctx.ellipse(72, eyeY, 5, expression === 'surprised' ? 7 : 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // 右眼高光
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.ellipse(74, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (emotion === 'surprised') {
+      // 惊讶 - 大眼睛
+      ctx.beginPath();
+      ctx.arc(headX - eyeSpacing, eyeY, headSize * 0.1, 0, Math.PI * 2);
+      ctx.arc(headX + eyeSpacing, eyeY, headSize * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (emotion === 'sad') {
+      // 难过 - 下垂眼睛
+      ctx.beginPath();
+      ctx.ellipse(headX - eyeSpacing, eyeY, headSize * 0.06, headSize * 0.08, 0, 0, Math.PI * 2);
+      ctx.ellipse(headX + eyeSpacing, eyeY, headSize * 0.06, headSize * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (emotion === 'confused') {
+      // 困惑 - 一只大一只小
+      ctx.beginPath();
+      ctx.arc(headX - eyeSpacing, eyeY, headSize * 0.08, 0, Math.PI * 2);
+      ctx.arc(headX + eyeSpacing, eyeY, headSize * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (emotion === 'thinking') {
+      // 思考 - 半闭眼
+      ctx.beginPath();
+      ctx.ellipse(headX - eyeSpacing, eyeY, headSize * 0.06, headSize * 0.04, 0, 0, Math.PI * 2);
+      ctx.ellipse(headX + eyeSpacing, eyeY, headSize * 0.06, headSize * 0.04, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 普通/开心 - 正常眼睛
+      ctx.beginPath();
+      ctx.arc(headX - eyeSpacing, eyeY, headSize * 0.06, 0, Math.PI * 2);
+      ctx.arc(headX + eyeSpacing, eyeY, headSize * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // 嘴巴
     ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    if (expression === 'happy') {
-      // 笑脸
-      ctx.arc(60, 72, 8, 0.1 * Math.PI, 0.9 * Math.PI);
-    } else if (expression === 'surprised') {
-      // 惊讶 O形嘴
-      ctx.arc(60, 75, 5, 0, Math.PI * 2);
-    } else if (expression === 'thinking') {
-      // 思考 ...
-      ctx.fillStyle = '#1a1a2e';
-      ctx.beginPath();
-      ctx.ellipse(60, 76, 3, 2, 0, 0, Math.PI * 2);
-      ctx.fill();
+
+    if (emotion === 'happy') {
+      ctx.arc(headX, headY + headSize * 0.15, headSize * 0.12, 0.1 * Math.PI, 0.9 * Math.PI);
+    } else if (emotion === 'surprised') {
+      ctx.arc(headX, headY + headSize * 0.2, headSize * 0.08, 0, Math.PI * 2);
+    } else if (emotion === 'sad') {
+      ctx.arc(headX, headY + headSize * 0.28, headSize * 0.1, 1.1 * Math.PI, 1.9 * Math.PI);
+    } else if (emotion === 'confused') {
+      ctx.moveTo(headX - headSize * 0.08, headY + headSize * 0.2);
+      ctx.lineTo(headX + headSize * 0.08, headY + headSize * 0.18);
     } else {
-      // 普通微笑
-      ctx.arc(60, 70, 6, 0.2 * Math.PI, 0.8 * Math.PI);
+      ctx.arc(headX, headY + headSize * 0.15, headSize * 0.08, 0.2 * Math.PI, 0.8 * Math.PI);
     }
     ctx.stroke();
 
-    // 腮红（可爱元素）
-    ctx.fillStyle = 'rgba(255, 150, 150, 0.3)';
-    ctx.beginPath();
-    ctx.ellipse(38, 70, 6, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(82, 70, 6, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 角色类型装饰
-    if (type === 'interviewer') {
-      // 眼镜
-      ctx.strokeStyle = '#1a1a2e';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(40, 54, 16, 12, 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.roundRect(64, 54, 16, 12, 2);
-      ctx.stroke();
-      // 眼镜桥
-      ctx.beginPath();
-      ctx.moveTo(56, 60);
-      ctx.lineTo(64, 60);
-      ctx.stroke();
-    } else if (type === 'candidate') {
-      // 耳机
-      ctx.strokeStyle = c.accent;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(30, 55, 10, 0.3 * Math.PI, 0.7 * Math.PI);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(90, 55, 10, 0.3 * Math.PI, 0.7 * Math.PI);
-      ctx.stroke();
-    }
-
-  }, [type, expression]);
+  }, [type, emotion, size]);
 
   return (
     <canvas
       ref={canvasRef}
       style={{
-        width: 120,
-        height: 160,
-        animation: isTyping ? 'float 0.5s ease-in-out infinite' : 'none',
+        width: size,
+        height: size,
+        flexShrink: 0,
       }}
     />
   );
 }
 
-export default function MangaCharacter({ type, isTyping = false }: MangaCharacterProps) {
+export default function MangaCharacter({ type, emotion = 'neutral', size = 40 }: MangaCharacterProps) {
   return (
-    <div style={{
-      position: 'relative',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-    }}>
-      <MangaAvatar type={type} isTyping={isTyping} />
-    </div>
+    <MangaAvatar type={type} emotion={emotion} size={size} />
   );
+}
+
+// 情绪 Emoji 映射
+export const emotionEmojis: Record<Emotion, string> = {
+  neutral: '😐',
+  happy: '😊',
+  thinking: '🤔',
+  surprised: '😮',
+  sad: '😟',
+  confused: '🤨',
+};
+
+// 根据消息内容推断情绪
+export function inferEmotion(content: string, senderType: string): Emotion {
+  const lowerContent = content.toLowerCase();
+
+  if (senderType === 'ai_interviewer') {
+    if (lowerContent.includes('不错') || lowerContent.includes('很好') || lowerContent.includes('满意')) {
+      return 'happy';
+    }
+    if (lowerContent.includes('?') || lowerContent.includes('？') || lowerContent.includes('怎么')) {
+      return 'thinking';
+    }
+    if (lowerContent.includes('不对') || lowerContent.includes('不是')) {
+      return 'confused';
+    }
+  }
+
+  if (senderType === 'ai_candidate') {
+    if (lowerContent.includes('谢谢') || lowerContent.includes('好的') || lowerContent.includes('明白')) {
+      return 'happy';
+    }
+    if (lowerContent.includes('不太') || lowerContent.includes('可能')) {
+      return 'thinking';
+    }
+    if (lowerContent.includes('困难') || lowerContent.includes('挑战')) {
+      return 'sad';
+    }
+  }
+
+  return 'neutral';
 }

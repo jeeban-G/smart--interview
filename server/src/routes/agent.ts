@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { agentService } from '../services/agent.service.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
-const DEFAULT_USER_ID = 1;
 
 // 获取所有 Agent
-router.get('/', (req, res) => {
+router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const agents = agentService.getByUser(DEFAULT_USER_ID);
+    const agents = agentService.getByUser(req.userId!);
     res.json(agents);
   } catch (error) {
     res.status(500).json({ error: '获取 Agent 失败' });
@@ -15,12 +15,16 @@ router.get('/', (req, res) => {
 });
 
 // 获取单个 Agent
-router.get('/:id', (req, res) => {
+router.get('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     const agent = agentService.getById(id);
     if (!agent) {
       return res.status(404).json({ error: 'Agent 不存在' });
+    }
+    // Verify ownership
+    if (agent.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此 Agent' });
     }
     res.json(agent);
   } catch (error) {
@@ -29,7 +33,7 @@ router.get('/:id', (req, res) => {
 });
 
 // 创建 Agent
-router.post('/', (req, res) => {
+router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { name, type, education, experience, skills, projects, personality, resume_text, style, specialties, company } = req.body;
 
@@ -41,7 +45,7 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: '无效的 Agent 类型' });
     }
 
-    const agent = agentService.create(DEFAULT_USER_ID, {
+    const agent = agentService.create(req.userId!, {
       name,
       type,
       education,
@@ -63,13 +67,13 @@ router.post('/', (req, res) => {
 });
 
 // 更新 Agent
-router.put('/:id', (req, res) => {
+router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的Agent ID' });
     }
-    const agent = agentService.update(id, DEFAULT_USER_ID, req.body);
+    const agent = agentService.update(id, req.userId!, req.body);
     if (!agent) {
       return res.status(404).json({ error: 'Agent 不存在' });
     }
@@ -80,13 +84,13 @@ router.put('/:id', (req, res) => {
 });
 
 // 删除 Agent
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的Agent ID' });
     }
-    agentService.delete(id, DEFAULT_USER_ID);
+    agentService.delete(id, req.userId!);
     res.json({ message: '删除成功' });
   } catch (error) {
     res.status(500).json({ error: '删除 Agent 失败' });

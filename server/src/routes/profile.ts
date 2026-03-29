@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { profileService } from '../services/profile.service.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
-const DEFAULT_USER_ID = 1;
 
 // GET /profiles - Get current user's profile
-router.get('/', (req, res) => {
+router.get('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const profile = profileService.getByUserId(DEFAULT_USER_ID);
+    const profile = profileService.getByUserId(req.userId!);
     res.json(profile);
   } catch (error) {
     res.status(500).json({ error: '获取画像失败' });
@@ -28,10 +28,10 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /profiles - Create new profile
-router.post('/', (req, res) => {
+router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { name, target_position, education, experience, skills, projects, personality, preferred_style } = req.body;
-    const profile = profileService.create(DEFAULT_USER_ID, {
+    const profile = profileService.create(req.userId!, {
       name,
       target_position,
       education,
@@ -48,12 +48,22 @@ router.post('/', (req, res) => {
 });
 
 // PUT /profiles/:id - Update profile
-router.put('/:id', (req, res) => {
+router.put('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的画像ID' });
     }
+
+    // 验证用户是否有权限更新此 profile
+    const existing = profileService.getById(id);
+    if (!existing) {
+      return res.status(404).json({ error: '画像不存在' });
+    }
+    if (existing.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权修改此画像' });
+    }
+
     const { name, target_position, education, experience, skills, projects, personality, preferred_style } = req.body;
     const profile = profileService.update(id, {
       name,
@@ -75,12 +85,22 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /profiles/:id - Delete profile
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的画像ID' });
     }
+
+    // 验证用户是否有权限删除此 profile
+    const existing = profileService.getById(id);
+    if (!existing) {
+      return res.status(404).json({ error: '画像不存在' });
+    }
+    if (existing.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权删除此画像' });
+    }
+
     const success = profileService.delete(id);
     if (!success) {
       return res.status(404).json({ error: '画像不存在' });

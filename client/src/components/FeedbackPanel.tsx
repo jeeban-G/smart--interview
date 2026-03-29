@@ -16,7 +16,8 @@ export default function FeedbackPanel({ feedbacks }: Props) {
       setNewFeedbackId(latestFeedback.id);
       setExpanded(feedbacks.length - 1);
       // Clear highlight after 3 seconds
-      setTimeout(() => setNewFeedbackId(null), 3000);
+      const timeoutId = setTimeout(() => setNewFeedbackId(null), 3000);
+      return () => clearTimeout(timeoutId);
     }
   }, [feedbacks.length]);
 

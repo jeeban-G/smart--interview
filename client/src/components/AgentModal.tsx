@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import type { Agent } from '../types';
 
@@ -26,6 +26,34 @@ export default function AgentModal({ isOpen, onClose, onSuccess, initialType = '
   const [specialties, setSpecialties] = useState(editAgent?.specialties || '');
   const [company, setCompany] = useState(editAgent?.company || '');
   const [resumeText, setResumeText] = useState('');
+
+  // Reset form when editAgent changes
+  useEffect(() => {
+    if (editAgent) {
+      setAgentType(editAgent.type);
+      setName(editAgent.name || '');
+      setEducation(editAgent.education || '');
+      setExperience(editAgent.experience || '');
+      setSkills(editAgent.skills || '');
+      setProjects(editAgent.projects || '');
+      setPersonality(editAgent.personality || '');
+      setStyle(editAgent.style || '');
+      setSpecialties(editAgent.specialties || '');
+      setCompany(editAgent.company || '');
+    } else {
+      setAgentType(initialType);
+      setName('');
+      setEducation('');
+      setExperience('');
+      setSkills('');
+      setProjects('');
+      setPersonality('');
+      setStyle('');
+      setSpecialties('');
+      setCompany('');
+    }
+    setResumeText('');
+  }, [editAgent, initialType]);
 
   if (!isOpen) return null;
 

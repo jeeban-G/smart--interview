@@ -26,16 +26,21 @@ export const userService = {
     const db = getDb();
     if (!db) throw new Error('Database not initialized');
 
-    const result = db.exec('SELECT * FROM users WHERE email = ?', [email]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
+    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
+    stmt.bind([email]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const user = stmt.getAsObject();
+    stmt.free();
 
-    const user = result[0].values[0];
     const userObj = {
-      id: user[0] as number,
-      email: user[1] as string,
-      password_hash: user[2] as string,
-      nickname: user[3] as string,
-      created_at: user[4] as string
+      id: user.id as number,
+      email: user.email as string,
+      password_hash: user.password_hash as string,
+      nickname: user.nickname as string,
+      created_at: user.created_at as string
     };
 
     const valid = bcrypt.compareSync(password, userObj.password_hash);
@@ -48,15 +53,20 @@ export const userService = {
     const db = getDb();
     if (!db) throw new Error('Database not initialized');
 
-    const result = db.exec('SELECT id, email, nickname, created_at FROM users WHERE id = ?', [id]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
+    const stmt = db.prepare('SELECT id, email, nickname, created_at FROM users WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const user = stmt.getAsObject();
+    stmt.free();
 
-    const user = result[0].values[0];
     return {
-      id: user[0] as number,
-      email: user[1] as string,
-      nickname: user[2] as string,
-      created_at: user[3] as string
+      id: user.id as number,
+      email: user.email as string,
+      nickname: user.nickname as string,
+      created_at: user.created_at as string
     };
   }
 };

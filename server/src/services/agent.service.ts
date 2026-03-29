@@ -1,6 +1,6 @@
 import { getDb, saveDb } from '../db/index.js';
 
-interface Agent {
+export interface Agent {
   id: number;
   user_id: number;
   name: string;
@@ -40,10 +40,13 @@ export const agentService = {
       data.specialties || null,
       data.company || null,
     ]);
-    saveDb();
+    stmt.free();
 
-    const result = db.exec('SELECT last_insert_rowid() as id');
-    const id = result[0]?.values[0]?.[0] as number;
+    const idStmt = db.prepare('SELECT last_insert_rowid() as id');
+    idStmt.step();
+    const id = idStmt.getAsObject().id as number;
+    idStmt.free();
+    saveDb();
 
     return this.getById(id);
   },
@@ -52,25 +55,30 @@ export const agentService = {
     const db = getDb();
     if (!db) throw new Error('Database not initialized');
 
-    const result = db.exec('SELECT * FROM agents WHERE id = ?', [id]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
+    const stmt = db.prepare('SELECT * FROM agents WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const row = stmt.getAsObject();
+    stmt.free();
 
-    const row = result[0].values[0];
     return {
-      id: row[0] as number,
-      user_id: row[1] as number,
-      name: row[2] as string,
-      type: row[3] as 'candidate' | 'interviewer',
-      education: row[4] as string | undefined,
-      experience: row[5] as string | undefined,
-      skills: row[6] as string | undefined,
-      projects: row[7] as string | undefined,
-      personality: row[8] as string | undefined,
-      resume_text: row[9] as string | undefined,
-      style: row[10] as string | undefined,
-      specialties: row[11] as string | undefined,
-      company: row[12] as string | undefined,
-      created_at: row[13] as string,
+      id: row.id as number,
+      user_id: row.user_id as number,
+      name: row.name as string,
+      type: row.type as 'candidate' | 'interviewer',
+      education: row.education as string | undefined,
+      experience: row.experience as string | undefined,
+      skills: row.skills as string | undefined,
+      projects: row.projects as string | undefined,
+      personality: row.personality as string | undefined,
+      resume_text: row.resume_text as string | undefined,
+      style: row.style as string | undefined,
+      specialties: row.specialties as string | undefined,
+      company: row.company as string | undefined,
+      created_at: row.created_at as string,
     };
   },
 
@@ -78,25 +86,30 @@ export const agentService = {
     const db = getDb();
     if (!db) throw new Error('Database not initialized');
 
-    const result = db.exec('SELECT * FROM agents WHERE user_id = ? ORDER BY created_at DESC', [userId]);
-    if (result.length === 0) return [];
-
-    return result[0].values.map(row => ({
-      id: row[0] as number,
-      user_id: row[1] as number,
-      name: row[2] as string,
-      type: row[3] as 'candidate' | 'interviewer',
-      education: row[4] as string | undefined,
-      experience: row[5] as string | undefined,
-      skills: row[6] as string | undefined,
-      projects: row[7] as string | undefined,
-      personality: row[8] as string | undefined,
-      resume_text: row[9] as string | undefined,
-      style: row[10] as string | undefined,
-      specialties: row[11] as string | undefined,
-      company: row[12] as string | undefined,
-      created_at: row[13] as string,
-    }));
+    const stmt = db.prepare('SELECT * FROM agents WHERE user_id = ? ORDER BY created_at DESC');
+    stmt.bind([userId]);
+    const agents: Agent[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      agents.push({
+        id: row.id as number,
+        user_id: row.user_id as number,
+        name: row.name as string,
+        type: row.type as 'candidate' | 'interviewer',
+        education: row.education as string | undefined,
+        experience: row.experience as string | undefined,
+        skills: row.skills as string | undefined,
+        projects: row.projects as string | undefined,
+        personality: row.personality as string | undefined,
+        resume_text: row.resume_text as string | undefined,
+        style: row.style as string | undefined,
+        specialties: row.specialties as string | undefined,
+        company: row.company as string | undefined,
+        created_at: row.created_at as string,
+      });
+    }
+    stmt.free();
+    return agents;
   },
 
   update(id: number, userId: number, data: Partial<Agent>) {

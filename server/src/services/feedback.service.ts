@@ -40,16 +40,42 @@ export const feedbackService = {
   getById(id: number): InterviewFeedback | null {
     const db = getDb();
     if (!db) return null;
-    const result = db.exec('SELECT * FROM interview_feedbacks WHERE id = ?', [id]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
-    return rowToFeedback(result[0].values[0]);
+    const stmt = db.prepare('SELECT * FROM interview_feedbacks WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const row = stmt.getAsObject();
+    stmt.free();
+    return {
+      id: row.id as number,
+      interview_id: row.interview_id as number,
+      round: row.round as number,
+      type: row.type as 'realtime' | 'summary',
+      content: row.content as string,
+      created_at: row.created_at as string,
+    };
   },
 
   getByInterviewId(interviewId: number): InterviewFeedback[] {
     const db = getDb();
     if (!db) return [];
-    const result = db.exec('SELECT * FROM interview_feedbacks WHERE interview_id = ? ORDER BY round ASC, created_at ASC', [interviewId]);
-    if (result.length === 0) return [];
-    return result[0].values.map(rowToFeedback);
+    const stmt = db.prepare('SELECT * FROM interview_feedbacks WHERE interview_id = ? ORDER BY round ASC, created_at ASC');
+    stmt.bind([interviewId]);
+    const feedbacks: InterviewFeedback[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      feedbacks.push({
+        id: row.id as number,
+        interview_id: row.interview_id as number,
+        round: row.round as number,
+        type: row.type as 'realtime' | 'summary',
+        content: row.content as string,
+        created_at: row.created_at as string,
+      });
+    }
+    stmt.free();
+    return feedbacks;
   },
 };

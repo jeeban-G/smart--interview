@@ -62,17 +62,55 @@ export const profileService = {
   getById(id: number): UserProfile | null {
     const db = getDb();
     if (!db) return null;
-    const result = db.exec('SELECT * FROM user_profiles WHERE id = ?', [id]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
-    return rowToProfile(result[0].values[0]);
+    const stmt = db.prepare('SELECT * FROM user_profiles WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const row = stmt.getAsObject();
+    stmt.free();
+    return {
+      id: row.id as number,
+      user_id: row.user_id as number,
+      name: row.name as string,
+      target_position: row.target_position as string | null,
+      education: row.education as string | null,
+      experience: row.experience as string | null,
+      skills: row.skills as string | null,
+      projects: row.projects as string | null,
+      personality: row.personality as string | null,
+      preferred_style: row.preferred_style as 'gentle' | 'strict' | 'coaching',
+      created_at: row.created_at as string,
+      updated_at: row.updated_at as string,
+    };
   },
 
   getByUserId(userId: number): UserProfile | null {
     const db = getDb();
     if (!db) return null;
-    const result = db.exec('SELECT * FROM user_profiles WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1', [userId]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
-    return rowToProfile(result[0].values[0]);
+    const stmt = db.prepare('SELECT * FROM user_profiles WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1');
+    stmt.bind([userId]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const row = stmt.getAsObject();
+    stmt.free();
+    return {
+      id: row.id as number,
+      user_id: row.user_id as number,
+      name: row.name as string,
+      target_position: row.target_position as string | null,
+      education: row.education as string | null,
+      experience: row.experience as string | null,
+      skills: row.skills as string | null,
+      projects: row.projects as string | null,
+      personality: row.personality as string | null,
+      preferred_style: row.preferred_style as 'gentle' | 'strict' | 'coaching',
+      created_at: row.created_at as string,
+      updated_at: row.updated_at as string,
+    };
   },
 
   update(id: number, data: Partial<UserProfile>): UserProfile | null {
@@ -94,7 +132,9 @@ export const profileService = {
     fields.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
 
-    db.run(`UPDATE user_profiles SET ${fields.join(', ')} WHERE id = ?`, values);
+    const stmt = db.prepare(`UPDATE user_profiles SET ${fields.join(', ')} WHERE id = ?`);
+    stmt.run(values);
+    stmt.free();
     saveDb();
     return this.getById(id);
   },
@@ -102,7 +142,9 @@ export const profileService = {
   delete(id: number): boolean {
     const db = getDb();
     if (!db) return false;
-    db.run('DELETE FROM user_profiles WHERE id = ?', [id]);
+    const stmt = db.prepare('DELETE FROM user_profiles WHERE id = ?');
+    stmt.run([id]);
+    stmt.free();
     saveDb();
     return true;
   },

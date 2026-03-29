@@ -44,23 +44,55 @@ export const coachingService = {
   getById(id: number): CoachingLog | null {
     const db = getDb();
     if (!db) return null;
-    const result = db.exec('SELECT * FROM coaching_logs WHERE id = ?', [id]);
-    if (result.length === 0 || result[0].values.length === 0) return null;
-    return rowToLog(result[0].values[0]);
+    const stmt = db.prepare('SELECT * FROM coaching_logs WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) {
+      stmt.free();
+      return null;
+    }
+    const row = stmt.getAsObject();
+    stmt.free();
+    return {
+      id: row.id as number,
+      interview_id: row.interview_id as number,
+      user_id: row.user_id as number,
+      coaching_type: row.coaching_type as 'guide' | 'correct' | 'info_request',
+      content: row.content as string,
+      agent_response: row.agent_response as 'pending' | 'accepted' | 'rejected' | 'question',
+      agent_feedback: row.agent_feedback as string | null,
+      created_at: row.created_at as string,
+    };
   },
 
   getByInterviewId(interviewId: number): CoachingLog[] {
     const db = getDb();
     if (!db) return [];
-    const result = db.exec('SELECT * FROM coaching_logs WHERE interview_id = ? ORDER BY created_at ASC', [interviewId]);
-    if (result.length === 0) return [];
-    return result[0].values.map(rowToLog);
+    const stmt = db.prepare('SELECT * FROM coaching_logs WHERE interview_id = ? ORDER BY created_at ASC');
+    stmt.bind([interviewId]);
+    const logs: CoachingLog[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      logs.push({
+        id: row.id as number,
+        interview_id: row.interview_id as number,
+        user_id: row.user_id as number,
+        coaching_type: row.coaching_type as 'guide' | 'correct' | 'info_request',
+        content: row.content as string,
+        agent_response: row.agent_response as 'pending' | 'accepted' | 'rejected' | 'question',
+        agent_feedback: row.agent_feedback as string | null,
+        created_at: row.created_at as string,
+      });
+    }
+    stmt.free();
+    return logs;
   },
 
   updateResponse(id: number, agentResponse: string, agentFeedback: string): CoachingLog | null {
     const db = getDb();
     if (!db) return null;
-    db.run('UPDATE coaching_logs SET agent_response = ?, agent_feedback = ? WHERE id = ?', [agentResponse, agentFeedback, id]);
+    const stmt = db.prepare('UPDATE coaching_logs SET agent_response = ?, agent_feedback = ? WHERE id = ?');
+    stmt.run([agentResponse, agentFeedback, id]);
+    stmt.free();
     saveDb();
     return this.getById(id);
   },

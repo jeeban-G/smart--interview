@@ -1,35 +1,65 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { interviewService } from '../services/interview.service.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { config } from '../config.js';
 
 const router = Router();
-
-const DEFAULT_USER_ID = 1;
 
 // SSE clients per interview ID
 const clients = new Map<number, Set<import('express').Response>>();
 
-// SSE endpoint for interview events
+// SSE endpoint for interview events (auth via query param since EventSource doesn't support headers)
 router.get('/:id/events', (req, res) => {
   const id = parseInt(req.params.id);
 
-  // Set SSE headers
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  });
+  // Validate token from query param (EventSource can't use headers)
+  const token = req.query.token as string;
+  if (!token) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '未登录' }));
+    return;
+  }
 
-  // Add client to this interview's subscriber set
-  if (!clients.has(id)) clients.set(id, new Set());
-  clients.get(id)!.add(res);
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret) as { userId: number };
+    const userId = decoded.userId;
 
-  // Send heartbeat every 30s
-  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 30000);
+    // Verify user has access to this interview
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: '面试不存在' }));
+      return;
+    }
+    if (interview.user_id !== userId) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: '无权访问此面试' }));
+      return;
+    }
 
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    clients.get(id)?.delete(res);
-  });
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    // Add client to this interview's subscriber set
+    if (!clients.has(id)) clients.set(id, new Set());
+    clients.get(id)!.add(res);
+
+    // Send heartbeat every 30s
+    const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 30000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      clients.get(id)?.delete(res);
+    });
+  } catch {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '无效的token' }));
+  }
 });
 
 // Export clients map for use by service/index
@@ -111,7 +141,7 @@ router.get('/positions', (req, res) => {
 });
 
 // 创建面试
-router.post('/create', async (req, res) => {
+router.post('/create', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { type, position, candidate_agent_id, interviewer_agent_id } = req.body;
     console.log(`[Create] Creating interview: type=${type}, position=${position}, candidate_agent_id=${candidate_agent_id}, interviewer_agent_id=${interviewer_agent_id}`);
@@ -123,7 +153,7 @@ router.post('/create', async (req, res) => {
     }
 
     try {
-      const interview = interviewService.create(DEFAULT_USER_ID, type, position, candidate_agent_id, interviewer_agent_id);
+      const interview = interviewService.create(req.userId!, type, position, candidate_agent_id, interviewer_agent_id);
       console.log(`[Create] Interview created with id=${interview.id}`);
 
       // 如果同时有候选人和面试官 Agent，自动开始对话
@@ -148,9 +178,9 @@ router.post('/create', async (req, res) => {
 });
 
 // 获取面试历史 - 必须在 /:id 前面
-router.get('/history', (req, res) => {
+router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const interviews = interviewService.getHistory(DEFAULT_USER_ID);
+    const interviews = interviewService.getHistory(req.userId!);
     res.json(interviews);
   } catch (error) {
     res.status(500).json({ error: '获取历史失败' });
@@ -171,13 +201,18 @@ router.get('/room/:code', (req, res) => {
 });
 
 // 获取面试详情
-router.get('/:id', (req, res) => {
+router.get('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     const interview = interviewService.getById(id);
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     res.json(interview);
@@ -187,7 +222,7 @@ router.get('/:id', (req, res) => {
 });
 
 // 发送消息
-router.post('/:id/message', async (req, res) => {
+router.post('/:id/message', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -205,6 +240,11 @@ router.post('/:id/message', async (req, res) => {
       return res.status(404).json({ error: '面试不存在' });
     }
 
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
+    }
+
     if (interview.status === 'completed') {
       return res.status(400).json({ error: '面试已结束' });
     }
@@ -217,9 +257,8 @@ router.post('/:id/message', async (req, res) => {
 
     // 如果是用户消息，生成 AI 回复
     if (resolvedSenderType === 'user') {
-      const aiResponse = await interviewService.generateAIResponse(id, 'ai_interviewer');
-      const aiMessage = interviewService.addMessage(id, 'ai_interviewer', 'AI 面试官', aiResponse);
-      res.json({ message, aiMessage });
+      const replyMessage = await interviewService.generateInterviewerResponseMessage(id);
+      res.json({ message, replyMessage });
     } else if (isAgentChat) {
       // 如果是 Agent 之间的对话，根据发送方确定回复方
       if (resolvedSenderType === 'ai_candidate') {
@@ -243,7 +282,7 @@ router.post('/:id/message', async (req, res) => {
 });
 
 // 触发下一个 Agent 回复（用于轮询获取 Agent 自动回复）
-router.get('/:id/next', async (req, res) => {
+router.get('/:id/next', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -253,6 +292,11 @@ router.get('/:id/next', async (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     // 返回最新的消息列表
@@ -265,7 +309,7 @@ router.get('/:id/next', async (req, res) => {
 });
 
 // 继续 Agent 多轮对话
-router.post('/:id/continue', async (req, res) => {
+router.post('/:id/continue', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -275,6 +319,11 @@ router.post('/:id/continue', async (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     if (interview.status === 'completed') {
@@ -291,7 +340,7 @@ router.post('/:id/continue', async (req, res) => {
 });
 
 // 获取对话状态（是否应该继续）
-router.get('/:id/status', (req, res) => {
+router.get('/:id/status', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -301,6 +350,11 @@ router.get('/:id/status', (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     const shouldContinue = interviewService.shouldContinueInterview(id);
@@ -314,7 +368,7 @@ router.get('/:id/status', (req, res) => {
 });
 
 // 获取消息列表
-router.get('/:id/messages', (req, res) => {
+router.get('/:id/messages', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -324,6 +378,11 @@ router.get('/:id/messages', (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     const messages = interviewService.getMessages(id);
@@ -334,7 +393,7 @@ router.get('/:id/messages', (req, res) => {
 });
 
 // 获取评估
-router.get('/:id/eval', async (req, res) => {
+router.get('/:id/eval', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -344,6 +403,11 @@ router.get('/:id/eval', async (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     // 先检查是否已有评估
@@ -366,7 +430,7 @@ router.get('/:id/eval', async (req, res) => {
 });
 
 // 结束面试
-router.post('/:id/complete', async (req, res) => {
+router.post('/:id/complete', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -376,6 +440,11 @@ router.post('/:id/complete', async (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     interviewService.complete(id);
@@ -391,7 +460,7 @@ router.post('/:id/complete', async (req, res) => {
 });
 
 // 开始面试（触发后台对话）
-router.post('/:id/start', async (req, res) => {
+router.post('/:id/start', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -401,6 +470,11 @@ router.post('/:id/start', async (req, res) => {
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限访问此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
 
     if (interview.status === 'completed') {
@@ -425,11 +499,18 @@ router.post('/:id/start', async (req, res) => {
 });
 
 // 暂停面试
-router.post('/:id/pause', (req, res) => {
+router.post('/:id/pause', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
     interviewService.pauseChat(id);
     res.json({ message: '面试已暂停' });
@@ -440,11 +521,18 @@ router.post('/:id/pause', (req, res) => {
 });
 
 // 继续面试
-router.post('/:id/resume', (req, res) => {
+router.post('/:id/resume', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
     interviewService.resumeChat(id);
     res.json({ message: '面试已继续' });
@@ -455,13 +543,18 @@ router.post('/:id/resume', (req, res) => {
 });
 
 // 删除面试
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     const interview = interviewService.getById(id);
 
     if (!interview) {
       return res.status(404).json({ error: '面试不存在' });
+    }
+
+    // 验证用户是否有权限删除此面试
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权删除此面试' });
     }
 
     const success = interviewService.delete(id);
@@ -477,11 +570,18 @@ router.delete('/:id', (req, res) => {
 });
 
 // Get feedback for an interview
-router.get('/:id/feedback', async (req, res) => {
+router.get('/:id/feedback', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
     const { feedbackService } = await import('../services/feedback.service.js');
     const feedbacks = feedbackService.getByInterviewId(id);
@@ -492,18 +592,26 @@ router.get('/:id/feedback', async (req, res) => {
 });
 
 // Add coaching log
-router.post('/:id/coaching', async (req, res) => {
+router.post('/:id/coaching', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的面试ID' });
     }
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
+    }
+
     const { coaching_type, content } = req.body;
     if (!content || !content.trim()) {
       return res.status(400).json({ error: '指导内容不能为空' });
     }
     const { coachingService } = await import('../services/coaching.service.js');
-    const log = coachingService.create(id, DEFAULT_USER_ID, coaching_type || 'info_request', content);
+    const log = coachingService.create(id, req.userId!, coaching_type || 'info_request', content);
     res.json(log);
   } catch (error) {
     res.status(500).json({ error: '记录指导失败' });
@@ -511,11 +619,18 @@ router.post('/:id/coaching', async (req, res) => {
 });
 
 // Get coaching logs for an interview
-router.get('/:id/coaching', async (req, res) => {
+router.get('/:id/coaching', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的面试ID' });
+    }
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
     }
     const { coachingService } = await import('../services/coaching.service.js');
     const logs = coachingService.getByInterviewId(id);
@@ -526,12 +641,20 @@ router.get('/:id/coaching', async (req, res) => {
 });
 
 // Process coaching guidance
-router.post('/:id/coach', async (req, res) => {
+router.post('/:id/coach', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ error: '无效的面试ID' });
     }
+    const interview = interviewService.getById(id);
+    if (!interview) {
+      return res.status(404).json({ error: '面试不存在' });
+    }
+    if (interview.user_id !== req.userId) {
+      return res.status(403).json({ error: '无权访问此面试' });
+    }
+
     const { content } = req.body;
 
     // Validate input
@@ -547,7 +670,7 @@ router.post('/:id/coach', async (req, res) => {
     const { coachingService } = await import('../services/coaching.service.js');
 
     try {
-      const log = coachingService.create(id, DEFAULT_USER_ID, coachingType, content);
+      const log = coachingService.create(id, req.userId!, coachingType, content);
       if (log) {
         coachingService.updateResponse(log.id, result.accepted ? 'accepted' : 'rejected', result.reason);
       }

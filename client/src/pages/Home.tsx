@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { Interview, Position, Agent } from '../types';
 import AgentModal from '../components/AgentModal';
 
@@ -13,7 +14,7 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState('全部');
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
-  const [roomStatus, setRoomStatus] = useState<{active: number, max: number, available: boolean}>({active: 0, max: 10, available: true});
+  const [roomStatus, setRoomStatus] = useState<{active: number, max: number, available: boolean, userActive?: number}>({active: 0, max: 10, available: true, userActive: 0});
   const [roomTab, setRoomTab] = useState<'active' | 'completed'>('active');
   const [multiRoomCount, setMultiRoomCount] = useState(3);
   const [multiRoomPositions, setMultiRoomPositions] = useState<Position[]>([]);
@@ -24,15 +25,10 @@ export default function Home() {
   const [selectedCandidateAgentId, setSelectedCandidateAgentId] = useState<number | null>(null);
   const [selectedInterviewerAgentId, setSelectedInterviewerAgentId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
-    api.login({ email: 'user@local', password: '' }).then((result: any) => {
-      localStorage.setItem('token', result.token);
-      localStorage.setItem('user', JSON.stringify(result.user));
-      loadData();
-    }).catch(() => {
-      loadData();
-    });
+    loadData();
   }, []);
 
   // 预设的默认 Agent
@@ -114,7 +110,10 @@ export default function Home() {
       ]);
       setPositions(posData as Position[]);
       setHistory(histData as Interview[]);
-      setRoomStatus(roomData as any);
+      setRoomStatus({
+        ...(roomData as any),
+        userActive: (histData as Interview[]).filter(i => i.status === 'in_progress').length
+      });
 
       if ((agentData as Agent[]).length === 0) {
         await initDefaultAgents();
@@ -317,8 +316,40 @@ export default function Home() {
               border: `1px solid ${roomStatus.available ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
             }}>
               <span style={{ fontSize: 12, color: roomStatus.available ? '#22c55e' : '#ef4444' }}>
-                ● 房间 {roomStatus.active}/{roomStatus.max}
+                ● 我的房间 {roomStatus.userActive}/{roomStatus.max}
               </span>
+            </div>
+
+            {/* User info and logout */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 12, color: '#a1a1aa' }}>
+                {user?.nickname || user?.email}
+              </span>
+              <button
+                onClick={logout}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: '#71717a',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                  e.currentTarget.style.color = '#ef4444';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.color = '#71717a';
+                }}
+              >
+                退出
+              </button>
             </div>
           </div>
         </header>
@@ -661,7 +692,7 @@ export default function Home() {
                 <input
                   type="range"
                   min={1}
-                  max={Math.min(10 - roomStatus.active, 10)}
+                  max={Math.min(10 - (roomStatus.userActive || 0), 10)}
                   value={multiRoomCount}
                   onChange={(e) => setMultiRoomCount(parseInt(e.target.value))}
                   style={{
@@ -672,7 +703,7 @@ export default function Home() {
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#71717a', marginTop: 6 }}>
                   <span>1</span>
-                  <span>可用: {10 - roomStatus.active} 房间</span>
+                  <span>可用: {10 - (roomStatus.userActive || 0)} 房间</span>
                   <span>10</span>
                 </div>
               </div>
@@ -975,7 +1006,7 @@ export default function Home() {
                         if (confirm('确定删除这个 Agent 吗？')) {
                           try {
                             await api.deleteAgent(agent.id);
-                            setAgents(agents.filter(a => a.id !== agent.id));
+                            setAgents(prev => prev.filter(a => a.id !== agent.id));
                           } catch (err) {
                             alert('删除失败');
                           }
@@ -1140,7 +1171,7 @@ export default function Home() {
                           if (confirm('确定删除这个面试记录吗？删除后无法恢复。')) {
                             try {
                               await api.deleteInterview(interview.id);
-                              setHistory(history.filter(i => i.id !== interview.id));
+                              setHistory(prev => prev.filter(i => i.id !== interview.id));
                             } catch (err: any) {
                               alert(err.message || '删除失败');
                             }
