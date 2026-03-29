@@ -21,6 +21,8 @@
 
 ## 技术架构
 
+### 系统架构图
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        客户端 (Browser)                        │
@@ -31,19 +33,42 @@
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      服务器 (Node.js)                         │
-│  Express + TypeScript + sql.js (SQLite)                     │
 │                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │ Interview    │  │ Agent       │  │ Coaching     │       │
-│  │ Service      │  │ Service     │  │ Service     │       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  表现层 (Presentation)                               │   │
+│  │  - Controllers (HTTP 请求处理)                       │   │
+│  │  - Routes (API 路由定义)                             │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  应用层 (Application)                                │   │
+│  │  - Use Cases (业务用例)                              │   │
+│  │  - InterviewOrchestrator (面试流程编排)             │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  领域层 (Domain)                                     │   │
+│  │  - Entities (实体定义)                               │   │
+│  │  - Repository Interfaces (仓储接口)                  │   │
+│  │  - Service Interfaces (服务接口)                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                              │                               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  基础设施层 (Infrastructure)                         │   │
+│  │  - SQLite Repositories (仓储实现)                    │   │
+│  │  - MiniMax Provider (AI 实现)                        │   │
+│  │  - EventBus (事件总线)                               │   │
+│  └─────────────────────────────────────────────────────┘   │
 │                                                              │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │              MiniMax M2.7 API                    │       │
-│  │         (AI 对话生成 / 评估报告生成)              │       │
-│  └──────────────────────────────────────────────────┘       │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### 架构特点
+
+- **分层架构**：表现层 → 应用层 → 领域层 → 基础设施层
+- **依赖倒置**：高层模块依赖抽象接口，不依赖具体实现
+- **依赖注入**：通过容器管理依赖，便于测试和替换
+- **事件驱动**：服务间通过 EventBus 通信，解耦模块
 
 ### 前端技术栈
 
@@ -99,20 +124,88 @@ smart--interview/
 │
 ├── server/                          # 后端项目
 │   ├── src/
-│   │   ├── routes/                  # 路由
-│   │   │   ├── agent.ts             # Agent 相关路由
-│   │   │   ├── auth.ts              # 认证路由
-│   │   │   ├── interview.ts          # 面试相关路由
-│   │   │   └── profile.ts            # 简历相关路由
-│   │   ├── services/                 # 业务逻辑
-│   │   │   ├── agent.service.ts      # Agent 服务
-│   │   │   ├── coaching.service.ts   # Coaching 服务
-│   │   │   └── interview.service.ts  # 面试核心服务
-│   │   ├── db/
-│   │   │   └── index.ts              # 数据库初始化
-│   │   └── index.ts                   # 服务器入口
+│   │   ├── domain/                  # 领域层
+│   │   │   ├── entities/            # 实体定义
+│   │   │   │   ├── interview.ts     # 面试实体
+│   │   │   │   ├── agent.ts         # Agent 实体
+│   │   │   │   ├── message.ts       # 消息实体
+│   │   │   │   ├── evaluation.ts    # 评估实体
+│   │   │   │   └── user.ts          # 用户实体
+│   │   │   ├── repositories/        # 仓储接口
+│   │   │   │   ├── interview.repository.ts
+│   │   │   │   ├── agent.repository.ts
+│   │   │   │   ├── message.repository.ts
+│   │   │   │   ├── evaluation.repository.ts
+│   │   │   │   └── user.repository.ts
+│   │   │   └── services/            # 服务接口
+│   │   │       ├── ai-provider.ts   # AI 提供商接口
+│   │   │       └── event-bus.ts     # 事件总线接口
+│   │   │
+│   │   ├── application/             # 应用层
+│   │   │   ├── use-cases/           # 业务用例
+│   │   │   │   ├── interview/
+│   │   │   │   │   ├── create-interview.ts
+│   │   │   │   │   ├── get-interview.ts
+│   │   │   │   │   ├── complete-interview.ts
+│   │   │   │   │   ├── send-message.ts
+│   │   │   │   │   ├── get-messages.ts
+│   │   │   │   │   ├── delete-interview.ts
+│   │   │   │   │   └── get-evaluation.ts
+│   │   │   │   └── agent/
+│   │   │   │       ├── create-agent.ts
+│   │   │   │       ├── get-agent.ts
+│   │   │   │       ├── update-agent.ts
+│   │   │   │       └── delete-agent.ts
+│   │   │   └── services/            # 应用服务
+│   │   │       └── interview-orchestrator.ts  # 面试流程编排
+│   │   │
+│   │   ├── infrastructure/          # 基础设施层
+│   │   │   ├── database/            # 数据库
+│   │   │   │   ├── connection.ts    # 数据库连接接口
+│   │   │   │   └── sqlite/          # SQLite 实现
+│   │   │   │       └── index.ts
+│   │   │   ├── repositories/        # 仓储实现
+│   │   │   │   ├── sqlite-interview.repository.ts
+│   │   │   │   ├── sqlite-agent.repository.ts
+│   │   │   │   ├── sqlite-message.repository.ts
+│   │   │   │   ├── sqlite-evaluation.repository.ts
+│   │   │   │   └── sqlite-user.repository.ts
+│   │   │   ├── ai/                  # AI 实现
+│   │   │   │   └── minimax-provider.ts
+│   │   │   └── event/               # 事件总线实现
+│   │   │       └── event-bus.ts
+│   │   │
+│   │   ├── presentation/            # 表现层
+│   │   │   ├── controllers/         # 控制器
+│   │   │   │   ├── interview.controller.ts
+│   │   │   │   └── agent.controller.ts
+│   │   │   └── routes/              # 路由
+│   │   │       ├── interview.routes.ts
+│   │   │       └── agent.routes.ts
+│   │   │
+│   │   ├── container/               # 依赖注入容器
+│   │   │   └── container.ts
+│   │   │
+│   │   ├── services/                # 旧服务（兼容层）
+│   │   │   ├── user.service.ts
+│   │   │   ├── profile.service.ts
+│   │   │   └── auth.middleware.ts
+│   │   │
+│   │   ├── db/                      # 数据库桥接
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── routes/                  # 旧路由（兼容层）
+│   │   │   ├── auth.ts
+│   │   │   └── profile.ts
+│   │   │
+│   │   └── index.ts                 # 服务器入口
+│   │
 │   ├── package.json
-│   └── .env                          # 环境变量
+│   └── .env                         # 环境变量
+│
+├── docs/                            # 文档
+│   └── superpowers/
+│       └── plans/                   # 实施计划
 │
 └── README.md
 ```
@@ -320,11 +413,120 @@ npm run dev
 
 ## 开发说明
 
+### 架构原则
+
+本项目采用**分层架构**设计，遵循以下原则：
+
+1. **依赖倒置原则**：高层模块（表现层、应用层）依赖抽象接口（领域层），不依赖具体实现
+2. **单一职责**：每个文件只负责一个明确的功能
+3. **接口隔离**：通过接口定义契约，实现细节由基础设施层提供
+4. **依赖注入**：使用容器统一管理依赖关系，便于测试和替换
+
 ### 添加新的 API 端点
 
-1. 在 `server/src/routes/` 中找到对应的路由文件
-2. 添加新的路由处理函数
-3. 在对应的 service 文件中添加业务逻辑
+#### 1. 定义领域接口
+
+在 `server/src/domain/repositories/` 中添加仓储接口方法：
+
+```typescript
+// domain/repositories/interview.repository.ts
+export interface IInterviewRepository {
+  // 现有方法...
+  newMethod(id: number): Promise<SomeResult>;
+}
+```
+
+#### 2. 实现仓储方法
+
+在 `server/src/infrastructure/repositories/` 中实现接口：
+
+```typescript
+// infrastructure/repositories/sqlite-interview.repository.ts
+async newMethod(id: number): Promise<SomeResult> {
+  // SQLite 实现
+}
+```
+
+#### 3. 创建用例
+
+在 `server/src/application/use-cases/` 中添加业务逻辑：
+
+```typescript
+// application/use-cases/interview/new-use-case.ts
+export class NewUseCase {
+  constructor(private interviewRepository: IInterviewRepository) {}
+
+  async execute(id: number): Promise<SomeResult> {
+    return this.interviewRepository.newMethod(id);
+  }
+}
+```
+
+#### 4. 添加控制器方法
+
+在 `server/src/presentation/controllers/` 中添加 HTTP 处理：
+
+```typescript
+// presentation/controllers/interview.controller.ts
+async newMethod(req: Request, res: Response) {
+  const result = await this.newUseCase.execute(req.params.id);
+  res.json(result);
+}
+```
+
+#### 5. 注册路由
+
+在 `server/src/presentation/routes/` 中添加路由：
+
+```typescript
+// presentation/routes/interview.routes.ts
+router.post('/:id/new', interviewController.newMethod.bind(interviewController));
+```
+
+### 切换 AI 提供商
+
+项目支持通过接口切换不同的 AI 提供商：
+
+1. **创建新的 Provider**（以 OpenAI 为例）：
+
+```typescript
+// infrastructure/ai/openai-provider.ts
+export class OpenAIProvider implements IAIProvider {
+  async generateResponse(messages: Message[]): Promise<string> {
+    // 调用 OpenAI API
+  }
+}
+```
+
+2. **修改容器配置**：
+
+```typescript
+// container/container.ts
+import { OpenAIProvider } from '../infrastructure/ai/openai-provider.js';
+
+// 替换 MiniMaxProvider
+const aiProvider: IAIProvider = new OpenAIProvider(apiKey);
+```
+
+### 切换数据库
+
+项目使用仓储模式，可以轻松切换数据库：
+
+1. **创建新的 Repository 实现**：
+
+```typescript
+// infrastructure/repositories/postgres-interview.repository.ts
+export class PostgresInterviewRepository implements IInterviewRepository {
+  // PostgreSQL 实现
+}
+```
+
+2. **修改容器配置**：
+
+```typescript
+// container/container.ts
+const interviewRepository: IInterviewRepository = new PostgresInterviewRepository(pool);
+```
 
 ### 添加新的组件
 
@@ -336,6 +538,37 @@ npm run dev
 当前使用 sql.js (SQLite in-memory)，数据库文件保存在 `server/interview.db`。
 
 如需重置数据库，删除 `server/interview.db` 并重启服务器。
+
+#### 添加新的表
+
+编辑 `server/src/infrastructure/database/sqlite/index.ts` 中的 `initialize()` 方法：
+
+```typescript
+// 在 initDatabase() 函数中添加
+this.db.exec(`
+  CREATE TABLE IF NOT EXISTS new_table (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+  );
+`);
+```
+
+## 架构优势
+
+### 解耦带来的好处
+
+| 场景 | 传统架构 | 新架构 |
+|------|----------|--------|
+| 更换 AI 提供商 | 需要修改多处代码 | 只需实现 IAIProvider 接口 |
+| 更换数据库 | 需要重写所有 SQL | 只需实现 Repository 接口 |
+| 单元测试 | 难以模拟依赖 | 通过接口轻松 Mock |
+| 添加新功能 | 可能破坏现有代码 | 独立开发，不影响其他模块 |
+
+### 可扩展性
+
+- **水平扩展**：可以独立扩展 AI 服务、数据库或缓存层
+- **垂直扩展**：每个模块可以单独优化性能
+- **功能扩展**：新功能通过添加用例实现，不影响现有代码
 
 ## 环境变量
 
