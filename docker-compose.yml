@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - AI_PROVIDER=${AI_PROVIDER:-openclaw}
+      - OPENCLAW_API_KEY=${OPENCLAW_API_KEY:-openclaw}
+      - OPENCLAW_API_URL=${OPENCLAW_API_URL:-http://localhost:18789/v1/chat/completions}
+      - OPENCLAW_MODEL=${OPENCLAW_MODEL:-deepseek-chat}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  # Optional: PostgreSQL database
+  # postgres:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     - POSTGRES_USER=smartinterview
+  #     - POSTGRES_PASSWORD=your_password_here
+  #     - POSTGRES_DB=smartinterview
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+
+  # Optional: Redis cache
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

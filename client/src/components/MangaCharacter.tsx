@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
 type Emotion = 'neutral' | 'happy' | 'thinking' | 'surprised' | 'sad' | 'confused';
 
@@ -9,7 +9,7 @@ interface MangaCharacterProps {
 }
 
 // 漫画风格小头像组件
-function MangaAvatar({ type, emotion = 'neutral', size = 40 }: { type: 'interviewer' | 'candidate' | 'user'; emotion?: Emotion; size?: number }) {
+const MangaAvatar = memo(function MangaAvatar({ type, emotion = 'neutral', size = 40 }: { type: 'interviewer' | 'candidate' | 'user'; emotion?: Emotion; size?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // 绘制漫画人物
@@ -126,13 +126,13 @@ function MangaAvatar({ type, emotion = 'neutral', size = 40 }: { type: 'intervie
       }}
     />
   );
-}
+});
 
-export default function MangaCharacter({ type, emotion = 'neutral', size = 40 }: MangaCharacterProps) {
+export default memo(function MangaCharacter({ type, emotion = 'neutral', size = 40 }: MangaCharacterProps) {
   return (
     <MangaAvatar type={type} emotion={emotion} size={size} />
   );
-}
+});
 
 // 情绪 Emoji 映射
 export const emotionEmojis: Record<Emotion, string> = {

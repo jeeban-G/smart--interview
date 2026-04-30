@@ -1,0 +1,45 @@
+{
+  "name": "smart-interview",
+  "version": "1.0.0",
+  "description": "AI 面试模拟平台",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "test": "npm run test:server && npm run test:client",
+    "test:server": "cd server && npm test",
+    "test:client": "cd client && npm test",
+    "lint": "npm run lint:server && npm run lint:client",
+    "lint:server": "cd server && npm run lint",
+    "lint:client": "cd client && npm run lint",
+    "type-check": "npm run type-check:server && npm run type-check:client",
+    "type-check:server": "cd server && npx tsc --noEmit",
+    "type-check:client": "cd client && npx tsc --noEmit",
+    "clean": "rm -rf node_modules client/node_modules server/node_modules",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "deploy": "bash scripts/deploy.sh",
+    "start:dev": "bash scripts/start.sh",
+    "test:all": "bash scripts/test.sh",
+    "lint:all": "bash scripts/lint.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "keywords": [
+    "interview",
+    "ai",
+    "simulation",
+    "react",
+    "express",
+    "typescript"
+  ],
+  "author": "jeeban",
+  "license": "MIT"
+}

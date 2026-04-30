@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { Evaluation, EnhancedEvaluation } from '../types';
 import RadarChart from './RadarChart';
 import ScoreBar from './ScoreBar';
@@ -10,7 +11,7 @@ const isEnhanced = (e: Evaluation | null): e is EnhancedEvaluation => {
   return e !== null && 'overall_score' in e;
 };
 
-export default function EvaluationReport({ evaluation }: EvaluationReportProps) {
+export default memo(function EvaluationReport({ evaluation }: EvaluationReportProps) {
   if (!evaluation) {
     return (
       <div style={{

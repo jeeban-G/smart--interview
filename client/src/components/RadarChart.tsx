@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface RadarChartProps {
   scores: {
     overall_score?: number;
@@ -16,7 +18,7 @@ const AXES = [
   { key: 'overall_score', label: '综合评分', angle: 198 },
 ];
 
-export default function RadarChart({ scores }: RadarChartProps) {
+export default memo(function RadarChart({ scores }: RadarChartProps) {
   const size = 220;
   const center = size / 2;
   const maxRadius = 85;

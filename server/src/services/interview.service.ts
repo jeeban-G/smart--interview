@@ -36,19 +36,19 @@ function generateRoomCode(): string {
   return code;
 }
 
-function rowToInterview(row: any[]): Interview {
+function rowToInterview(row: Record<string, unknown>): Interview {
   return {
-    id: row[0] as number,
-    user_id: row[1] as number,
-    room_code: row[2] as string,
-    type: row[3] as 'group' | 'single',
-    position: row[4] as string,
-    question: row[5] as string | null,
-    status: row[6] as 'pending' | 'in_progress' | 'completed',
-    duration: row[7] as number,
-    candidate_agent_id: row[10] as number | null,
-    interviewer_agent_id: row[11] as number | null,
-    created_at: row[8] as string,
+    id: row.id as number,
+    user_id: row.user_id as number,
+    room_code: row.room_code as string,
+    type: row.type as 'group' | 'single',
+    position: row.position as string,
+    question: row.question as string | null,
+    status: row.status as 'pending' | 'in_progress' | 'completed',
+    duration: row.duration as number,
+    candidate_agent_id: row.candidate_agent_id as number | null,
+    interviewer_agent_id: row.interviewer_agent_id as number | null,
+    created_at: row.created_at as string,
   };
 }
 
@@ -65,7 +65,7 @@ class InterviewServiceClass extends EventEmitter {
     const activeRooms = db.exec(
       `SELECT COUNT(*) FROM interviews WHERE user_id = ${userId} AND status = 'in_progress'`
     );
-    const count = activeRooms[0]?.values[0]?.[0] as number || 0;
+    const count = (activeRooms[0]?.values[0]?.[0] as number) || 0;
     if (count >= MAX_ACTIVE_ROOMS) {
       throw new Error(`当前活跃房间已达上限(${MAX_ACTIVE_ROOMS})，请先结束已有面试`);
     }
@@ -90,7 +90,7 @@ class InterviewServiceClass extends EventEmitter {
     stmt.run([userId, roomCode, type, position, question, 'in_progress', 0, candidateAgentId || null, interviewerAgentId || null]);
 
     const result = db.exec('SELECT last_insert_rowid() as id');
-    const id = result[0]?.values[0]?.[0] as number;
+    const id = (result[0]?.values[0]?.[0] as number);
     saveDb();
 
     return {
@@ -360,8 +360,7 @@ class InterviewServiceClass extends EventEmitter {
 
     // 添加候选人自我介绍消息
     const introMessage = this.addMessage(interviewId, 'ai_candidate', candidateAgent.name, result.content);
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('message', { interviewId, message: introMessage, agent: 'candidate' });
+    this.emit('message', { interviewId, message: introMessage, agent: 'candidate' });
 
     // 同步生成面试官回应并添加到消息
     const replyMessage = await this.generateInterviewerResponseMessage(interviewId);
@@ -411,8 +410,7 @@ class InterviewServiceClass extends EventEmitter {
 
     // 添加面试官回复
     const message = this.addMessage(interviewId, 'ai_interviewer', interviewerAgent.name, result.content);
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('message', { interviewId, message, agent: 'interviewer' });
+    this.emit('message', { interviewId, message, agent: 'interviewer' });
 
     return message;
   }
@@ -447,8 +445,7 @@ class InterviewServiceClass extends EventEmitter {
 
     // 添加候选人回复
     const message = this.addMessage(interviewId, 'ai_candidate', candidateAgent.name, result.content);
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('message', { interviewId, message, agent: 'candidate' });
+    this.emit('message', { interviewId, message, agent: 'candidate' });
 
     // After candidate response, generate feedback
     const currentMessages = this.getMessages(interviewId);
@@ -463,8 +460,7 @@ class InterviewServiceClass extends EventEmitter {
     if (feedback.content) {
       const { feedbackService } = await import('./feedback.service.js');
       feedbackService.create(interviewId, round, 'realtime', feedback.content);
-      // @ts-ignore - this will be an EventEmitter instance at runtime
-      (this as any).emit('feedback', { interviewId, content: feedback.content, round });
+      this.emit('feedback', { interviewId, content: feedback.content, round });
     }
 
     return message;
@@ -497,14 +493,14 @@ class InterviewServiceClass extends EventEmitter {
     }
 
     // 1. 发送候选人正在输入的提示
-    (this as any).emit('typing', { interviewId, agent: 'candidate' });
+    this.emit('typing', { interviewId, agent: 'candidate' });
 
     // 2. 先生成候选人的回复
     const candidateResponse = await this.generateCandidateResponseMessage(interviewId);
     if (candidateResponse) {
       newMessages.push(candidateResponse);
       // 通过 SSE 发送给客户端
-      (this as any).emit('message', { interviewId, message: candidateResponse, agent: 'candidate' });
+      this.emit('message', { interviewId, message: candidateResponse, agent: 'candidate' });
     } else {
       return { messages: [], shouldContinue: false };
     }
@@ -520,7 +516,7 @@ class InterviewServiceClass extends EventEmitter {
     }
 
     // 4. 发送面试官正在输入的提示
-    (this as any).emit('typing', { interviewId, agent: 'interviewer' });
+    this.emit('typing', { interviewId, agent: 'interviewer' });
 
     // 5. 检查是否应该继续
     const { continue: shouldContinue } = this.shouldContinueInterview(interviewId);
@@ -534,7 +530,7 @@ class InterviewServiceClass extends EventEmitter {
     if (interviewerResponse) {
       newMessages.push(interviewerResponse);
       // 通过 SSE 发送给客户端
-      (this as any).emit('message', { interviewId, message: interviewerResponse, agent: 'interviewer' });
+      this.emit('message', { interviewId, message: interviewerResponse, agent: 'interviewer' });
     }
 
     return { messages: newMessages, shouldContinue };
@@ -562,8 +558,7 @@ class InterviewServiceClass extends EventEmitter {
     }
 
     // Emit typing event to indicate conversation is starting
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('typing', { interviewId, agent: 'interviewer' });
+    this.emit('typing', { interviewId, agent: 'interviewer' });
 
     // Continue conversation loop
     let shouldContinue = true;
@@ -592,8 +587,7 @@ class InterviewServiceClass extends EventEmitter {
 
       if (shouldContinue) {
         // Emit typing event for next round
-        // @ts-ignore - this will be an EventEmitter instance at runtime
-        (this as any).emit('typing', { interviewId, agent: 'interviewer' });
+        this.emit('typing', { interviewId, agent: 'interviewer' });
       }
     }
 
@@ -641,8 +635,7 @@ class InterviewServiceClass extends EventEmitter {
 
       if (shouldContinue) {
         // Emit typing event for next round
-        // @ts-ignore - this will be an EventEmitter instance at runtime
-        (this as any).emit('typing', { interviewId, agent: 'interviewer' });
+        this.emit('typing', { interviewId, agent: 'interviewer' });
       }
     }
 
@@ -663,8 +656,7 @@ class InterviewServiceClass extends EventEmitter {
     stmt.run([interviewId]);
     saveDb();
 
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('done', { interviewId });
+    this.emit('done', { interviewId });
 
     // Clean up pause state
     pauseFlags.delete(interviewId);
@@ -676,8 +668,7 @@ class InterviewServiceClass extends EventEmitter {
    */
   pauseChat(interviewId: number): void {
     pauseFlags.set(interviewId, true);
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('paused', { interviewId });
+    this.emit('paused', { interviewId });
   }
 
   /**
@@ -685,8 +676,7 @@ class InterviewServiceClass extends EventEmitter {
    */
   resumeChat(interviewId: number): void {
     pauseFlags.set(interviewId, false);
-    // @ts-ignore - this will be an EventEmitter instance at runtime
-    (this as any).emit('resumed', { interviewId });
+    this.emit('resumed', { interviewId });
 
     // If there's a resume signal, call it to wake up the loop
     const signal = resumeSignals.get(interviewId);
@@ -794,10 +784,10 @@ ${conversationHistory}
 
     // Emit coaching events
     if (parsed?.decision === '采纳') {
-      (this as any).emit('coaching_accepted', { interviewId, original: coachingContent, applied: parsed.appliedContent });
+      this.emit('coaching_accepted', { interviewId, original: coachingContent, applied: parsed.appliedContent });
       return { accepted: true, reason: '', appliedContent: parsed.appliedContent };
     } else {
-      (this as any).emit('coaching_rejected', { interviewId, original: coachingContent, reason: parsed?.reason || '解析失败' });
+      this.emit('coaching_rejected', { interviewId, original: coachingContent, reason: parsed?.reason || '解析失败' });
       return { accepted: false, reason: parsed?.reason || '解析失败' };
     }
   }

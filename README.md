@@ -19,6 +19,30 @@
 - **对话气泡**：漫画式对话气泡，带有速度线等装饰
 - **角色动画**：打字时角色有动画效果
 
+## 项目优化
+
+### 已完成的优化
+
+1. **依赖清理**：移除未使用的 Three.js 和 WebSocket 依赖，减少包体积
+2. **代码结构优化**：
+   - 提取 SSE 事件转发逻辑为独立模块
+   - 拆分大型 Home.tsx 组件为多个小组件
+   - 创建自定义 Hook 管理状态逻辑
+3. **TypeScript 类型修复**：移除所有 `@ts-ignore` 注释，修复类型错误
+4. **错误处理**：添加统一的错误处理中间件和响应格式
+5. **日志系统**：添加结构化日志工具
+6. **性能优化**：使用 React.memo 优化组件渲染
+7. **数据库层优化**：创建连接管理器和仓储基类
+8. **部署支持**：添加 Docker 和 docker-compose 配置
+
+### 优化效果
+
+- **包体积减少**：移除约 25 个未使用的依赖包
+- **代码可维护性提升**：通过组件拆分和 Hook 提取，代码更易理解和维护
+- **类型安全增强**：修复所有 TypeScript 类型错误
+- **错误处理统一**：提供一致的错误响应格式
+- **部署简化**：支持 Docker 一键部署
+
 ## 技术架构
 
 ### 系统架构图
@@ -265,6 +289,39 @@ npm run dev
 ### 4. 访问应用
 
 打开浏览器访问 **http://localhost:3000**
+
+## Docker 部署
+
+### 使用 Docker Compose
+
+1. 配置环境变量：
+```bash
+cp server/.env.example server/.env
+# 编辑 server/.env 填入必要的环境变量
+```
+
+2. 启动服务：
+```bash
+docker-compose up -d
+```
+
+3. 访问应用：
+- 前端：http://localhost:3000
+- 后端 API：http://localhost:3001
+
+### 单独构建镜像
+
+```bash
+# 构建后端镜像
+docker build -t smart-interview-server -f Dockerfile.server .
+
+# 构建前端镜像
+docker build -t smart-interview-client -f Dockerfile.client .
+
+# 运行容器
+docker run -d -p 3001:3001 --name server smart-interview-server
+docker run -d -p 3000:80 --name client smart-interview-client
+```
 
 ## 使用指南
 

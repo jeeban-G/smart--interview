@@ -9,6 +9,8 @@ import interviewRoutes from './routes/interview.js';
 import agentRoutes from './routes/agent.js';
 import profileRoutes from './routes/profile.js';
 import { clients } from './routes/interview.js';
+import { setupSSEEventForwarding } from './events/sse-forwarder.js';
+import { errorHandler } from './middleware/error-handler.js';
 import './config.js'; // Validates required env vars when accessed
 
 dotenv.config();
@@ -29,78 +31,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// SSE event forwarding from interviewService to connected clients
-interviewService.on('message', ({ interviewId, message, agent }) => {
-  const interviewClients = clients.get(interviewId);
-  if (interviewClients) {
-    const data = JSON.stringify({ type: 'message', message, agent });
-    interviewClients.forEach(client => {
-      client.write(`data: ${data}\n\n`);
-    });
-  }
-});
+// Setup SSE event forwarding
+setupSSEEventForwarding(interviewService, clients);
 
-interviewService.on('done', ({ interviewId }) => {
-  // 生成评估报告
-  interviewService.generateEvaluation(interviewId).then((evaluation) => {
-    const interviewClients = clients.get(interviewId);
-    if (interviewClients) {
-      const data = JSON.stringify({ type: 'done', interviewId, evaluation });
-      interviewClients.forEach(client => {
-        client.write(`data: ${data}\n\n`);
-      });
-    }
-  }).catch((err) => {
-    console.error('Generate evaluation error:', err);
-    const interviewClients = clients.get(interviewId);
-    if (interviewClients) {
-      const data = JSON.stringify({ type: 'done', interviewId });
-      interviewClients.forEach(client => {
-        client.write(`data: ${data}\n\n`);
-      });
-    }
-  });
-});
-
-interviewService.on('typing', ({ interviewId, agent }) => {
-  const interviewClients = clients.get(interviewId);
-  if (interviewClients) {
-    const data = JSON.stringify({ type: 'typing', agent });
-    interviewClients.forEach(client => {
-      client.write(`data: ${data}\n\n`);
-    });
-  }
-});
-
-interviewService.on('coaching_accepted', ({ interviewId, original, applied }) => {
-  const interviewClients = clients.get(interviewId);
-  if (interviewClients) {
-    const data = JSON.stringify({ type: 'coaching_accepted', interviewId, original, applied });
-    interviewClients.forEach(client => {
-      client.write(`data: ${data}\n\n`);
-    });
-  }
-});
-
-interviewService.on('coaching_rejected', ({ interviewId, original, reason }) => {
-  const interviewClients = clients.get(interviewId);
-  if (interviewClients) {
-    const data = JSON.stringify({ type: 'coaching_rejected', interviewId, original, reason });
-    interviewClients.forEach(client => {
-      client.write(`data: ${data}\n\n`);
-    });
-  }
-});
-
-interviewService.on('feedback', ({ interviewId, round, content }) => {
-  const interviewClients = clients.get(interviewId);
-  if (interviewClients) {
-    const data = JSON.stringify({ type: 'feedback', interviewId, round, content });
-    interviewClients.forEach(client => {
-      client.write(`data: ${data}\n\n`);
-    });
-  }
-});
+// Error handling middleware (must be after routes)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
 

@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface ScoreBarProps {
   label: string;
   score: number;
@@ -5,7 +7,7 @@ interface ScoreBarProps {
   color?: string;
 }
 
-export default function ScoreBar({ label, score, maxScore = 100, color = '#fbbf24' }: ScoreBarProps) {
+export default memo(function ScoreBar({ label, score, maxScore = 100, color = '#fbbf24' }: ScoreBarProps) {
   const percentage = (score / maxScore) * 100;
 
   return (
